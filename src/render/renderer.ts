@@ -40,7 +40,6 @@ export interface RenderOptions {
   attract: boolean;
 }
 
-const SAFE_TOP = 96;
 const SAFE_BOTTOM = 150;
 
 export class Renderer {
@@ -628,7 +627,7 @@ export class Renderer {
     const { ctx, width: w, height: h } = this;
     const toScreen = (p: Vec) => ({ x: (p.x - cam.x) * cam.zoom + w / 2, y: (p.y - cam.y) * cam.zoom + h / 2 });
     const pad = 26;
-    const box = { x0: pad, y0: SAFE_TOP, x1: w - pad, y1: h - SAFE_BOTTOM };
+    const box = { x0: pad, y0: w < 1000 ? 110 : 96, x1: w - pad, y1: h - SAFE_BOTTOM };
     const items: { pos: Vec; color: string; icon: 'target' | 'av' }[] = [
       { pos: g.job.stage === 'pickup' ? g.job.pickup : g.job.dropoff, color: g.job.stage === 'pickup' ? t.pickup : t.dropoff, icon: 'target' },
       ...g.avs.filter((a) => a.state === 'chase' || a.state === 'alert').map((a) => ({ pos: a.pos, color: t.pursuit, icon: 'av' as const })),

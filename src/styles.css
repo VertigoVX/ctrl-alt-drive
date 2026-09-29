@@ -452,7 +452,7 @@ h2 {
 
 .toasts {
   position: absolute;
-  top: calc(max(14px, env(safe-area-inset-top)) + 86px);
+  top: calc(max(14px, env(safe-area-inset-top)) + 148px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -488,6 +488,26 @@ h2 {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* Wide screens have room for toasts beside the banner, clear of the edge indicators. */
+@media (min-width: 1000px) {
+  .toasts {
+    top: max(18px, env(safe-area-inset-top));
+  }
+}
+
+.hint-touch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .hint-touch {
+    display: flex;
+  }
+  .hint-desktop {
+    display: none;
+  }
 }
 
 @keyframes toast-in {

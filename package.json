@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "balance": "vite-node scripts/balance.ts"
   },
   "license": "MIT",
   "devDependencies": {
@@ -20,6 +21,7 @@
     "jsdom": "^25.0.1",
     "typescript": "^5.9.3",
     "vite": "^5.4.21",
+    "vite-node": "^2.1.9",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^2.1.9"
   }
