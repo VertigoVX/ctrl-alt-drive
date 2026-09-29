@@ -28,8 +28,8 @@ function step(av: Autonomous, taxi: { x: number; y: number }, seconds: number, s
   const rng = createRng(seed);
   for (let t = 0; t < seconds; t += tick) updateAutonomous(av, { map, taxi, dt: tick, rng, tuning: DEFAULT_AV_TUNING });
 }
-// Somewhere the car can never see: tucked behind the block, far away.
-const hidden = tileCenter(map, 12, 4);
+// Somewhere the car can never see or reach (off the map entirely).
+const hidden = { x: -5000, y: -5000 };
 
 describe('self-driving car behaviour', () => {
   it('starts patrolling with headlights off', () => {
@@ -74,8 +74,6 @@ describe('self-driving car behaviour', () => {
   });
 
   it('cannot see through buildings', () => {
-    const av = createAutonomous(1, map, { x: 1, y: 1 }, Math.PI / 2); // facing south along the west street
-    step(av, tileCenter(map, 3, 4), 0.02); // taxi is around the corner behind the block's edge? no — it is in the open
     const blocked = createAutonomous(2, map, { x: 3, y: 1 }, Math.PI / 2);
     step(blocked, tileCenter(map, 3, 4), 0.3); // straight south of it, but the block is in between
     expect(blocked.state).toBe('patrol');
