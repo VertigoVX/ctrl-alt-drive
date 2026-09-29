@@ -128,7 +128,7 @@ function newJob(g: GameState, passenger?: string): Job {
   const dropoffTile = rng.pick(drops);
   const routeTiles = f1[pickupTile.y * map.width + pickupTile.x] + f2[dropoffTile.y * map.width + dropoffTile.x];
   const tilesPerSecond = GAME_RULES.referenceSpeed / map.tileSize;
-  const timeTotal = Math.round(routeTiles / tilesPerSecond * 1.5 + 8);
+  const timeTotal = Math.round(routeTiles / tilesPerSecond * 1.8 + 10);
   return {
     stage: 'pickup',
     passenger: passenger ?? rng.pick(PASSENGERS),
@@ -150,7 +150,7 @@ function randomRoadAwayFrom(g: GameState, from: Vec, minTiles: number): Point | 
   return candidates.length ? g.rng.pick(candidates) : null;
 }
 
-function spawnAv(g: GameState): boolean {
+export function spawnAv(g: GameState): boolean {
   const t = randomRoadAwayFrom(g, g.taxi.pos, GAME_RULES.minSpawnDistance);
   if (!t) return false;
   const n = g.rng.pick(drivableNeighbours(g.map, t.x, t.y));
@@ -180,7 +180,13 @@ export function createGame(opts: GameOptions): GameState {
   const roads = roadTiles(map);
   const mid = { x: map.width / 2, y: map.height / 2 };
   const start = roads.reduce((a, b) => (Math.hypot(b.x - mid.x, b.y - mid.y) < Math.hypot(a.x - mid.x, a.y - mid.y) ? b : a));
-  const dir = drivableNeighbours(map, start.x, start.y)[0];
+  const runLength = (n: Point) => {
+    const dx = n.x - start.x, dy = n.y - start.y;
+    let k = 1;
+    while (isDrivable(tileAt(map, start.x + dx * (k + 1), start.y + dy * (k + 1)))) k++;
+    return k;
+  };
+  const dir = drivableNeighbours(map, start.x, start.y).reduce((a, b) => (runLength(b) > runLength(a) ? b : a));
   const taxi = createVehicle(tileCenter(map, start.x, start.y), Math.atan2(dir.y - start.y, dir.x - start.x));
 
   const g: GameState = {

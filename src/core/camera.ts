@@ -14,13 +14,13 @@ export interface Follow {
   speed: number;
 }
 
-export const createCamera = (at: Vec): Camera => ({ x: at.x, y: at.y, zoom: 1.15, shake: 0 });
+export const createCamera = (at: Vec): Camera => ({ x: at.x, y: at.y, zoom: 0.9, shake: 0 });
 
 export function updateCamera(cam: Camera, target: Follow, view: { w: number; h: number }, map: CityMap, dt: number) {
   const k = Math.min(1, 3 * dt);
   const speedRatio = clamp(Math.abs(target.speed) / 270, 0, 1.4);
   // Small screens get a slightly wider view so you can see what's coming.
-  const base = clamp(Math.min(view.w, view.h) / 620, 0.72, 1.2);
+  const base = clamp(Math.min(view.w, view.h) / 820, 0.62, 0.95);
   cam.zoom = lerp(cam.zoom, base * (1.1 - speedRatio * 0.2), Math.min(1, 1.5 * dt));
 
   const lookAhead = target.speed * 0.45;

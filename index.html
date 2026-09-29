@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#1E2023" />
+    <meta name="description" content="Ctrl+Alt+Drive — the last human cab in a city of robotaxis. Get your fare there before the self-driving fleet gets you." />
+    <title>Ctrl+Alt+Drive</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚕</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="map" aria-label="City map"></canvas>
+
+    <div id="flash" class="flash" aria-hidden="true"></div>
+
+    <!-- In-game HUD, laid out like a navigation app -->
+    <div id="hud" class="hud" hidden>
+      <div class="banner material" id="banner" role="status" aria-live="polite">
+        <div class="banner-icon" id="bannerIcon" aria-hidden="true"></div>
+        <div class="banner-copy">
+          <div class="banner-distance" id="bannerDistance">—</div>
+          <div class="banner-instruction" id="bannerInstruction">Finding a route</div>
+        </div>
+      </div>
+
+      <div class="map-controls material">
+        <button class="map-button" id="themeButton" aria-label="Switch to day map" title="Day / night map (T)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" /></svg>
+        </button>
+        <button class="map-button" id="soundButton" aria-label="Mute sound" title="Sound (M)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" /></svg>
+        </button>
+        <button class="map-button" id="pauseButton" aria-label="Pause" title="Pause (P)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" /></svg>
+        </button>
+      </div>
+
+      <div class="toasts" id="toasts" aria-live="polite"></div>
+
+      <section class="sheet material" aria-label="Current fare">
+        <div class="grabber" aria-hidden="true"></div>
+        <div class="fare">
+          <div class="fare-who">
+            <span class="fare-dot" id="fareDot"></span>
+            <div>
+              <div class="fare-title" id="fareTitle">Pick up Maya</div>
+              <div class="fare-where" id="fareWhere">412 Juniper St</div>
+            </div>
+          </div>
+          <div class="meter">
+            <div class="meter-time" id="meterTime">0:00</div>
+            <div class="meter-label">on the meter</div>
+          </div>
+        </div>
+        <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
+        <div class="stats">
+          <div class="stat"><span class="stat-value" id="score">0</span><span class="stat-label">Score</span></div>
+          <div class="stat"><span class="stat-value" id="fares">0</span><span class="stat-label">Fares</span></div>
+          <div class="stat"><span class="stat-value" id="level">1</span><span class="stat-label">Level</span></div>
+          <div class="stat stat-lives" aria-label="Lives"><span class="lives" id="lives"></span><span class="stat-label">Cabs left</span></div>
+        </div>
+        <div class="chips" id="chips"></div>
+      </section>
+    </div>
+
+    <!-- Title -->
+    <section id="titleScreen" class="screen">
+      <div class="card material">
+        <h1 class="logo" aria-label="Ctrl+Alt+Drive">
+          <kbd class="key">Ctrl</kbd><span class="plus">+</span><kbd class="key">Alt</kbd><span class="plus">+</span><kbd class="key key-drive">Drive</kbd>
+        </h1>
+        <p class="lede">You're the last human cab in a city of robotaxis. Get every fare there before the fleet gets you.</p>
+        <ul class="rules">
+          <li><span class="rule-glyph pin-green" aria-hidden="true"></span>Collect your passenger at the green pin and follow the blue line to the red one. The meter's running.</li>
+          <li><span class="rule-glyph beam" aria-hidden="true"></span>A self-driving car turns its headlights on the moment it sees you. Break its line of sight to shake it.</li>
+          <li><kbd class="key key-mini">Del</kbd>Drive over a Del key to reboot the whole fleet, then ram them off the road.</li>
+        </ul>
+        <button class="primary" id="startButton">Start shift</button>
+        <div class="controls-hint">
+          <span class="hint-keys"><kbd class="key key-mini">W</kbd><kbd class="key key-mini">A</kbd><kbd class="key key-mini">S</kbd><kbd class="key key-mini">D</kbd></span>
+          <span>or arrow keys to drive, <kbd class="key key-mini">P</kbd> to pause. On a phone, drag anywhere to steer.</span>
+        </div>
+        <p class="best" id="bestLine" hidden></p>
+      </div>
+    </section>
+
+    <!-- Pause -->
+    <section id="pauseScreen" class="screen screen-center" hidden>
+      <div class="card card-small material">
+        <h2>Paused</h2>
+        <p class="lede">The fleet waits for no one — except you, right now.</p>
+        <button class="primary" id="resumeButton">Resume</button>
+        <button class="secondary" id="quitButton">End shift</button>
+      </div>
+    </section>
+
+    <!-- Game over -->
+    <section id="overScreen" class="screen screen-center" hidden>
+      <div class="card card-small material">
+        <h2>Shift over</h2>
+        <p class="lede" id="overLine">A robotaxi took your last fare.</p>
+        <dl class="summary">
+          <div><dt>Score</dt><dd id="overScore">0</dd></div>
+          <div><dt>Fares</dt><dd id="overFares">0</dd></div>
+          <div><dt>Escapes</dt><dd id="overEscapes">0</dd></div>
+          <div><dt>Cars rebooted off the road</dt><dd id="overRecycled">0</dd></div>
+        </dl>
+        <p class="best" id="overBest"></p>
+        <button class="primary" id="againButton">Drive a new city</button>
+        <button class="secondary" id="replayButton">Replay this city</button>
+        <p class="seed" id="overSeed"></p>
+      </div>
+    </section>
+
+    <div id="countdown" class="countdown" aria-live="assertive" hidden><kbd class="key key-count" id="countKey">3</kbd></div>
+    <div id="stick" class="stick" hidden><div class="stick-knob" id="stickKnob"></div></div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
