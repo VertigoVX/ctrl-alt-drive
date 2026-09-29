@@ -58,6 +58,15 @@ describe('city generation', () => {
     expect(count(Tile.Park)).toBeGreaterThan(0);
   });
 
+  it.each([1, 1234, 5555])('seed %i: keeps water inside the river corridor (no leaking canals)', (seed) => {
+    const map = generateCity({ width: 44, height: 32, seed });
+    for (let y = 0; y < map.height; y++) {
+      const waterXs: number[] = [];
+      for (let x = 0; x < map.width; x++) if (tileAt(map, x, y) === Tile.Water || tileAt(map, x, y) === Tile.Bridge) waterXs.push(x);
+      if (waterXs.length) expect(Math.max(...waterXs) - Math.min(...waterXs)).toBeLessThanOrEqual(8);
+    }
+  });
+
   it('has plenty of intersections to make route choices at', () => {
     const junctions = roadTiles(city).filter((t) => drivableNeighbours(city, t.x, t.y).length >= 3);
     expect(junctions.length).toBeGreaterThan(20);
