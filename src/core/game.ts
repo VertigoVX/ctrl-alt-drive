@@ -180,14 +180,7 @@ export function createGame(opts: GameOptions): GameState {
   const roads = roadTiles(map);
   const mid = { x: map.width / 2, y: map.height / 2 };
   const start = roads.reduce((a, b) => (Math.hypot(b.x - mid.x, b.y - mid.y) < Math.hypot(a.x - mid.x, a.y - mid.y) ? b : a));
-  const runLength = (n: Point) => {
-    const dx = n.x - start.x, dy = n.y - start.y;
-    let k = 1;
-    while (isDrivable(tileAt(map, start.x + dx * (k + 1), start.y + dy * (k + 1)))) k++;
-    return k;
-  };
-  const dir = drivableNeighbours(map, start.x, start.y).reduce((a, b) => (runLength(b) > runLength(a) ? b : a));
-  const taxi = createVehicle(tileCenter(map, start.x, start.y), Math.atan2(dir.y - start.y, dir.x - start.x));
+  const taxi = createVehicle(tileCenter(map, start.x, start.y), 0);
 
   const g: GameState = {
     seed: opts.seed, map, rng, taxi, avs: [], route: [], powerups: [],
@@ -201,6 +194,9 @@ export function createGame(opts: GameOptions): GameState {
   g.job = newJob(g);
   for (let i = 0; i < GAME_RULES.initialAvs; i++) spawnAv(g);
   refreshRoute(g);
+  // Face the first leg of the route so the shift starts moving towards the passenger.
+  const [a, b] = g.route;
+  if (a && b) taxi.heading = Math.atan2(b.y - a.y, b.x - a.x);
   return g;
 }
 

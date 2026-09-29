@@ -35,18 +35,11 @@ describe('game setup', () => {
     expect(isDrivable(tileAt(g.map, t.x, t.y))).toBe(true);
   });
 
-  it.each([1, 42, 1234, 777])('seed %i: points the taxi down its longest open street', (seed) => {
+  it.each([1, 42, 1234, 777])('seed %i: points the taxi along its route to the first passenger', (seed) => {
     const game = createGame({ seed });
-    const t = worldToTile(game.map, game.taxi.pos);
-    const run = (dx: number, dy: number) => {
-      let n = 0;
-      while (isDrivable(tileAt(game.map, t.x + dx * (n + 1), t.y + dy * (n + 1)))) n++;
-      return n;
-    };
-    const dx = Math.round(Math.cos(game.taxi.heading));
-    const dy = Math.round(Math.sin(game.taxi.heading));
-    const best = Math.max(run(1, 0), run(-1, 0), run(0, 1), run(0, -1));
-    expect(run(dx, dy)).toBe(best);
+    const [from, to] = game.route;
+    expect(Math.round(Math.cos(game.taxi.heading))).toBe(to.x - from.x);
+    expect(Math.round(Math.sin(game.taxi.heading))).toBe(to.y - from.y);
   });
 
   it('starts with three lives, no score, and a passenger waiting', () => {
