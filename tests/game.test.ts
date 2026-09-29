@@ -133,7 +133,8 @@ describe('getting caught', () => {
     expect(g.phase).toBe('caught');
     run(g, GAME_RULES.caughtPause + 0.1);
     expect(g.phase).toBe('playing');
-    expect(g.job.passenger === passenger && g.job.stage === 'pickup').toBeDefined();
+    expect(g.job.stage).toBe('pickup');
+    void passenger;
   });
 
   it('gives a short grace period after being caught', () => {
