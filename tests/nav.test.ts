@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { findPath, nextTurn } from '../src/core/pathfinding';
 import { hasLineOfSight, canSee } from '../src/core/vision';
-import { Tile, type CityMap, tileCenter, drivableNeighbours, isDrivable, tileAt } from '../src/core/city';
+import { Tile, type CityMap, tileCenter, isDrivable, tileAt } from '../src/core/city';
 
 /**
  * Hand-made test map (legend: # building, . road, = bridge, ~ water, * park)
@@ -127,5 +127,3 @@ describe('canSee (headlight cone)', () => {
   });
 });
 
-// keep the helper import used for readability in future tests
-void drivableNeighbours;
