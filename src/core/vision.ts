@@ -33,3 +33,24 @@ export function canSee(map: CityMap, eye: Eye, target: Vec, cone: Cone): boolean
   if (!close && Math.abs(angleDiff(eye.heading, angleOf(sub(target, eye.pos)))) > cone.halfAngle) return false;
   return hasLineOfSight(map, eye.pos, target);
 }
+
+/** End points of `rays` sight rays spread across the cone, each stopping at the first building. */
+export function visibilityFan(map: CityMap, eye: Eye, cone: Cone, rays = 24): Vec[] {
+  const step = map.tileSize / 8;
+  const out: Vec[] = [];
+  for (let i = 0; i < rays; i++) {
+    const a = eye.heading - cone.halfAngle + (cone.halfAngle * 2 * i) / (rays - 1);
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    let d = 0;
+    while (d < cone.range) {
+      const nd = Math.min(cone.range, d + step);
+      const x = eye.pos.x + dx * nd;
+      const y = eye.pos.y + dy * nd;
+      if (blocksSight(tileAt(map, Math.floor(x / map.tileSize), Math.floor(y / map.tileSize)))) break;
+      d = nd;
+    }
+    out.push({ x: eye.pos.x + dx * d, y: eye.pos.y + dy * d });
+  }
+  return out;
+}

@@ -137,3 +137,17 @@ describe('distanceField (BFS)', () => {
     expect(d[2 * map.width + 2]).toBe(-1);
   });
 });
+
+describe('visibilityFan (for drawing honest headlight cones)', () => {
+  it('casts rays across the cone that stop at buildings', async () => {
+    const { visibilityFan } = await import('../src/core/vision');
+    const eye = { pos: tileCenter(map, 1, 1), heading: 0 };
+    const fan = visibilityFan(map, eye, { range: 200, halfAngle: Math.PI / 4 }, 9);
+    expect(fan).toHaveLength(9);
+    const lengths = fan.map((p) => Math.hypot(p.x - eye.pos.x, p.y - eye.pos.y));
+    for (const l of lengths) expect(l).toBeLessThanOrEqual(200 + 1e-6);
+    // Straight down the open street goes further than the rays angled into buildings.
+    expect(lengths[4]).toBeGreaterThan(lengths[0]);
+    expect(lengths[4]).toBeGreaterThan(lengths[8]);
+  });
+});
