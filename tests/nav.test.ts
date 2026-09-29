@@ -127,3 +127,13 @@ describe('canSee (headlight cone)', () => {
   });
 });
 
+
+describe('distanceField (BFS)', () => {
+  it('gives road distance from a start tile, -1 where unreachable', async () => {
+    const { distanceField } = await import('../src/core/pathfinding');
+    const d = distanceField(map, { x: 1, y: 1 });
+    expect(d[1 * map.width + 1]).toBe(0);
+    expect(d[4 * map.width + 8]).toBe(10);
+    expect(d[2 * map.width + 2]).toBe(-1);
+  });
+});

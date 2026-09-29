@@ -74,3 +74,23 @@ export function nextTurn(path: Point[]): Turn {
   }
   return { kind: 'arrive', tilesAway: path.length - 1, at: last };
 }
+
+/** Road distance (in tiles) from `start` to every tile; -1 where unreachable. */
+export function distanceField(map: CityMap, start: Point): Int32Array {
+  const d = new Int32Array(map.width * map.height).fill(-1);
+  if (!isDrivable(tileAt(map, start.x, start.y))) return d;
+  d[start.y * map.width + start.x] = 0;
+  const queue: Point[] = [start];
+  for (let qi = 0; qi < queue.length; qi++) {
+    const cur = queue[qi];
+    const base = d[cur.y * map.width + cur.x];
+    for (const n of drivableNeighbours(map, cur.x, cur.y)) {
+      const k = n.y * map.width + n.x;
+      if (d[k] === -1) {
+        d[k] = base + 1;
+        queue.push(n);
+      }
+    }
+  }
+  return d;
+}
