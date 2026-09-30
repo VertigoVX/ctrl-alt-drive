@@ -1,4 +1,6 @@
-export type ThemeName = 'night' | 'day';
+import type { ThemeId } from '../core/settings';
+
+export type ThemeName = ThemeId;
 
 export interface MapTheme {
   land: string;
@@ -30,6 +32,9 @@ export interface MapTheme {
   dropoff: string;
   /** Composite mode for light cones — additive light only reads well on a dark map. */
   lightBlend: GlobalCompositeOperation;
+  /** Whether HUD panels should use the dark or light material. */
+  ui: 'dark' | 'light';
+  label2: string;
 }
 
 // Colours follow Apple Maps' standard (day) and dark (night) map palettes.
@@ -63,6 +68,8 @@ export const THEMES: Record<ThemeName, MapTheme> = {
     pickup: '#30D158',
     dropoff: '#FF453A',
     lightBlend: 'lighter',
+    ui: 'dark',
+    label2: 'Night',
   },
   day: {
     land: '#F3F1EC',
@@ -93,5 +100,106 @@ export const THEMES: Record<ThemeName, MapTheme> = {
     pickup: '#34C759',
     dropoff: '#FF3B30',
     lightBlend: 'source-over',
+    ui: 'light',
+    label2: 'Day',
+  },
+  // Neon Noir: rain-slick asphalt, neon kerbs and glowing rooflines.
+  neon: {
+    land: '#0D0A18',
+    park: '#0F2620',
+    parkEdge: '#123026',
+    water: '#071A33',
+    waterEdge: '#0E3A70',
+    road: '#1C1630',
+    roadCasing: '#FF2E97',
+    roadDash: '#3D3066',
+    bridgeRail: '#00E5FF',
+    roof: '#161029',
+    roofEdge: '#7A3CFF',
+    shadow: 'rgba(0,0,0,0.6)',
+    label: '#CDB9FF',
+    labelHalo: 'rgba(13,10,24,0.9)',
+    route: '#00E5FF',
+    routeCasing: '#007C99',
+    routeDone: 'rgba(0,229,255,0.25)',
+    taxi: '#FFD60A',
+    taxiDark: '#B38F00',
+    av: '#EEEBFF',
+    avGlass: '#0D0A18',
+    lidar: '#00E5FF',
+    sensor: 'rgba(0,229,255,0.10)',
+    headlight: 'rgba(255,232,250,',
+    pursuit: '#FF453A',
+    pickup: '#30D158',
+    dropoff: '#FF453A',
+    lightBlend: 'lighter',
+    ui: 'dark',
+    label2: 'Neon Noir',
+  },
+  // Blueprint: the city as the planners drew it, with a yellow-pencil route.
+  blueprint: {
+    land: '#123E6E',
+    park: '#175480',
+    parkEdge: '#1B5E8E',
+    water: '#0B2C52',
+    waterEdge: '#2E6AA8',
+    road: '#1B4F86',
+    roadCasing: '#D6E6FF',
+    roadDash: '#6F9BD1',
+    bridgeRail: '#D6E6FF',
+    roof: '#15457A',
+    roofEdge: '#BCD4F5',
+    shadow: 'rgba(4,20,45,0.35)',
+    label: '#E4EEFF',
+    labelHalo: 'rgba(18,62,110,0.9)',
+    route: '#FFD60A',
+    routeCasing: '#A88600',
+    routeDone: 'rgba(255,214,10,0.25)',
+    taxi: '#FFD60A',
+    taxiDark: '#B38F00',
+    av: '#FFFFFF',
+    avGlass: '#0B2C52',
+    lidar: '#7FDBFF',
+    sensor: 'rgba(214,230,255,0.10)',
+    headlight: 'rgba(255,248,220,',
+    pursuit: '#FF453A',
+    pickup: '#30D158',
+    dropoff: '#FF6B5E',
+    lightBlend: 'lighter',
+    ui: 'dark',
+    label2: 'Blueprint',
+  },
+  // Vintage: an old paper street atlas with a red-ink route.
+  vintage: {
+    land: '#EFE4CC',
+    park: '#D3D9A8',
+    parkEdge: '#C4CB95',
+    water: '#B7CDBF',
+    waterEdge: '#9FB9A8',
+    road: '#FBF5E6',
+    roadCasing: '#C9B38A',
+    roadDash: '#E6DAC0',
+    bridgeRail: '#A8926A',
+    roof: '#E3D2B0',
+    roofEdge: '#C4AE86',
+    shadow: 'rgba(90,60,20,0.16)',
+    label: '#5E4A2E',
+    labelHalo: 'rgba(251,245,230,0.92)',
+    route: '#B8452F',
+    routeCasing: '#7E2A1B',
+    routeDone: 'rgba(184,69,47,0.25)',
+    taxi: '#F2B705',
+    taxiDark: '#9C7600',
+    av: '#FFFDF7',
+    avGlass: '#3B3226',
+    lidar: '#2F7F8F',
+    sensor: 'rgba(47,127,143,0.10)',
+    headlight: 'rgba(230,150,40,',
+    pursuit: '#C0392B',
+    pickup: '#3E8E41',
+    dropoff: '#B8452F',
+    lightBlend: 'source-over',
+    ui: 'light',
+    label2: 'Vintage',
   },
 };

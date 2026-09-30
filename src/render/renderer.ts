@@ -4,6 +4,7 @@ import { isDrivable, Tile, tileAt, tileCenter, type CityMap } from '../core/city
 import type { GameState, Powerup } from '../core/game';
 import type { Vec } from '../core/math';
 import { visibilityFan } from '../core/vision';
+import { drawTaxiSprite, type TaxiLook } from './taxiSprite';
 import { THEMES, type MapTheme, type ThemeName } from './theme';
 
 interface Label {
@@ -38,9 +39,14 @@ export interface RenderOptions {
   braking: boolean;
   /** Title-screen mode hides the taxi, route and pins. */
   attract: boolean;
+  look: TaxiLook;
+  /** Screen space covered by HUD panels; edge indicators stay clear of it. */
+  insets: { top: number; bottom: number; left: number };
 }
 
-const SAFE_BOTTOM = 150;
+/** Upper bound on backing-store pixels; keeps big tablets and 4K screens smooth. */
+const PIXEL_BUDGET = 7_000_000;
+
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -60,12 +66,22 @@ export class Renderer {
     this.ctx = ctx;
   }
 
-  resize() {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.width = this.canvas.clientWidth;
-    this.height = this.canvas.clientHeight;
-    this.canvas.width = Math.round(this.width * this.dpr);
-    this.canvas.height = Math.round(this.height * this.dpr);
+  /**
+   * Match the backing store to the element's real size at the device's pixel density.
+   * Called every frame: it's a cheap comparison, and it means orientation changes and
+   * mobile browser toolbars sliding in and out can never leave the canvas stretched.
+   */
+  syncSize() {
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    const want = Math.min(window.devicePixelRatio || 1, 3);
+    const dpr = Math.min(want, Math.sqrt(PIXEL_BUDGET / Math.max(1, w * h)));
+    if (w === this.width && h === this.height && dpr === this.dpr) return;
+    this.width = w;
+    this.height = h;
+    this.dpr = dpr;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
   }
 
   floatText(text: string, pos: Vec, color: string) {
@@ -123,6 +139,7 @@ export class Renderer {
   render(g: GameState, cam: Camera, opts: RenderOptions, dt: number) {
     const { ctx, width: w, height: h } = this;
     const theme = THEMES[opts.theme];
+    this.syncSize();
     this.time += dt;
     this.prepare(g.map);
 
@@ -154,11 +171,11 @@ export class Renderer {
     for (const p of g.powerups) this.drawPowerup(p);
     for (const av of g.avs) this.drawVision(g.map, av, theme);
     for (const av of g.avs) this.drawAv(av, theme);
-    if (!opts.attract) this.drawTaxi(g, theme, opts.braking);
+    if (!opts.attract) this.drawTaxi(g, theme, opts);
     this.drawEffects(dt);
     ctx.restore();
 
-    if (!opts.attract) this.drawIndicators(g, cam, theme);
+    if (!opts.attract) this.drawIndicators(g, cam, theme, opts.insets);
   }
 
   // ---- map ----------------------------------------------------------------
@@ -268,9 +285,11 @@ export class Renderer {
   }
 
   private drawLabels(t: MapTheme, cam: Camera, v: { x0: number; y0: number; x1: number; y1: number }, ts: number) {
-    if (cam.zoom < 0.55) return;
+    if (cam.zoom < 0.4) return;
     const { ctx } = this;
-    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", system-ui, sans-serif';
+    // Sized in screen pixels, so labels stay crisp and legible at any zoom.
+    const px = 11 / cam.zoom;
+    ctx.font = `600 ${px.toFixed(2)}px -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -280,7 +299,7 @@ export class Renderer {
       ctx.translate(l.x, l.y);
       if (l.vertical) ctx.rotate(-Math.PI / 2);
       ctx.strokeStyle = t.labelHalo;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 / cam.zoom;
       ctx.strokeText(l.text, 0, 0);
       ctx.fillStyle = t.label;
       ctx.fillText(l.text, 0, 0);
@@ -531,14 +550,14 @@ export class Renderer {
     }
   }
 
-  private drawTaxi(g: GameState, t: MapTheme, braking: boolean) {
+  private drawTaxi(g: GameState, t: MapTheme, opts: RenderOptions) {
     const { ctx } = this;
     const v = g.taxi;
     if (g.invulnerable > 0 && Math.sin(this.time * 30) < 0) return;
     ctx.save();
     ctx.translate(v.pos.x, v.pos.y);
     ctx.rotate(v.heading);
-    // Short headlight throw.
+    // Short headlight throw on dark maps.
     if (t.lightBlend === 'lighter') {
       const grad = ctx.createRadialGradient(20, 0, 2, 20, 0, 70);
       grad.addColorStop(0, 'rgba(255,236,170,0.35)');
@@ -562,33 +581,7 @@ export class Renderer {
       }
       ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    this.roundRect(-16, -8, 36, 20, 6);
-    ctx.fill();
-    ctx.fillStyle = t.taxi;
-    this.roundRect(-18, -10, 36, 20, 6);
-    ctx.fill();
-    ctx.strokeStyle = t.taxiDark;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Windscreens.
-    ctx.fillStyle = '#1C1C1E';
-    this.roundRect(4, -8, 7, 16, 2.5);
-    ctx.fill();
-    this.roundRect(-15, -7, 4, 14, 2);
-    ctx.fill();
-    // Roof sign: lit when the cab is free, dark with a passenger aboard.
-    const free = g.job.stage === 'pickup';
-    ctx.fillStyle = free ? '#FFF9E0' : '#6B5A00';
-    this.roundRect(-5, -4.5, 5, 9, 1.5);
-    ctx.fill();
-    // Lamps.
-    ctx.fillStyle = '#FFF6D5';
-    ctx.fillRect(16.5, -8, 1.5, 4);
-    ctx.fillRect(16.5, 4, 1.5, 4);
-    ctx.fillStyle = braking ? '#FF3B30' : '#8A1C16';
-    ctx.fillRect(-18, -8, 1.5, 4);
-    ctx.fillRect(-18, 4, 1.5, 4);
+    drawTaxiSprite(ctx, opts.look, { lit: g.job.stage === 'pickup', braking: opts.braking, time: this.time });
     ctx.restore();
   }
 
@@ -622,12 +615,12 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  private drawIndicators(g: GameState, cam: Camera, t: MapTheme) {
+  private drawIndicators(g: GameState, cam: Camera, t: MapTheme, insets: RenderOptions['insets']) {
     if (g.phase === 'over') return;
     const { ctx, width: w, height: h } = this;
     const toScreen = (p: Vec) => ({ x: (p.x - cam.x) * cam.zoom + w / 2, y: (p.y - cam.y) * cam.zoom + h / 2 });
     const pad = 26;
-    const box = { x0: pad, y0: w < 1000 ? 110 : 96, x1: w - pad, y1: h - SAFE_BOTTOM };
+    const box = { x0: insets.left + pad, y0: insets.top + pad, x1: w - pad, y1: h - insets.bottom - pad };
     const items: { pos: Vec; color: string; icon: 'target' | 'av' }[] = [
       { pos: g.job.stage === 'pickup' ? g.job.pickup : g.job.dropoff, color: g.job.stage === 'pickup' ? t.pickup : t.dropoff, icon: 'target' },
       ...g.avs.filter((a) => a.state === 'chase' || a.state === 'alert').map((a) => ({ pos: a.pos, color: t.pursuit, icon: 'av' as const })),
