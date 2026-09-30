@@ -138,12 +138,16 @@
 
     <!-- Pause -->
     <section id="pauseScreen" class="screen screen-center" hidden>
-      <div class="card card-small material">
-        <h2>Paused</h2>
-        <p class="lede">The fleet waits for no one — except you, right now.</p>
+      <div class="card card-small material" role="dialog" aria-labelledby="pauseTitle">
+        <h2 id="pauseTitle">Paused</h2>
+        <p class="lede">Everything you've earned is already in the bank, so leaving mid-shift costs you nothing but this run.</p>
         <button class="primary" id="resumeButton">Resume</button>
-        <button class="secondary" id="pauseSettingsButton">Settings</button>
-        <button class="secondary" id="quitButton">End shift</button>
+        <button class="secondary" id="restartButton">Restart shift</button>
+        <div class="button-row">
+          <button class="secondary" id="pauseSettingsButton">Settings</button>
+          <button class="secondary" id="menuButton">Main menu</button>
+        </div>
+        <p class="shortcut-hint hint-desktop"><kbd class="key key-mini">P</kbd> resume <kbd class="key key-mini">R</kbd> restart <kbd class="key key-mini">Q</kbd> main menu</p>
       </div>
     </section>
 
@@ -167,6 +171,7 @@
           <button class="secondary" id="replayButton">Change city</button>
           <button class="secondary" id="overGarageButton">Garage</button>
         </div>
+        <button class="text-button" id="overMenuButton">Main menu</button>
         <p class="seed" id="overSeed"></p>
       </div>
     </section>

@@ -244,12 +244,34 @@ function startShift() {
   setMode('playing');
 }
 
-function endShift() {
-  $('overTips').textContent = money(shiftTips);
+/** Count this run towards the best shift, however it ends. Earnings are banked as they happen. */
+function recordBest() {
   if (game.score > best) {
     best = game.score;
     store.set('cad.best', String(best));
   }
+}
+
+/** Leave the current run for the title screen, from pause or the end-of-shift screen. */
+function quitToTitle() {
+  recordBest();
+  show('countdown', false);
+  $('toasts').innerHTML = '';
+  keys.clear();
+  resetAttract();
+  returnMode = 'title';
+  setMode('title');
+}
+
+/** Start a fresh run in the same city and mode, straight from the pause menu. */
+function restartShift() {
+  recordBest();
+  startShift();
+}
+
+function endShift() {
+  $('overTips').textContent = money(shiftTips);
+  recordBest();
   $('overScore').textContent = money(game.score);
   $('overFares').textContent = String(game.fares);
   $('overEscapes').textContent = String(game.escapes);
@@ -550,10 +572,19 @@ let stickMemory = createStickMemory();
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  if (mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) {
+  // Enter/Space shortcuts defer to a focused button, which handles those keys itself.
+  const onButton = document.activeElement instanceof HTMLButtonElement;
+  if (mode === 'title' && !onButton && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
     return startShift();
   }
+  if (mode === 'paused' && e.code === 'KeyR') return restartShift();
+  if (mode === 'paused' && e.code === 'KeyQ') return quitToTitle();
+  if (mode === 'over' && !onButton && (e.code === 'Enter' || e.code === 'Space')) {
+    e.preventDefault();
+    return startShift();
+  }
+  if (mode === 'over' && e.code === 'Escape') return quitToTitle();
   if (e.code === 'KeyP' || e.code === 'Escape') {
     if (mode === 'playing') setMode('paused');
     else if (mode === 'paused') setMode('playing');
@@ -641,7 +672,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-steer]').forEach((b) =>
 );
 void STEERING_PRESETS;
 $('resumeButton').addEventListener('click', () => setMode('playing'));
-$('quitButton').addEventListener('click', endShift);
+$('restartButton').addEventListener('click', restartShift);
+$('menuButton').addEventListener('click', quitToTitle);
+$('overMenuButton').addEventListener('click', quitToTitle);
 $('againButton').addEventListener('click', () => startShift());
 $('replayButton').addEventListener('click', () => {
   returnMode = 'title';

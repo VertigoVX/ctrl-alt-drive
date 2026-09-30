@@ -1045,6 +1045,39 @@ h2 {
   75% { transform: translateX(3px); }
 }
 
+/* ---------- Pause / end-of-shift navigation ---------- */
+
+.shortcut-hint {
+  margin: 14px 0 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.shortcut-hint .key-mini {
+  margin-left: 6px;
+}
+
+.shortcut-hint .key-mini:first-child {
+  margin-left: 0;
+}
+
+.text-button {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  border: 0;
+  background: none;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
 /* ---------- Shared bits ---------- */
 
 .button-row {
@@ -1574,5 +1607,19 @@ h2 {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     transition-duration: 1ms !important;
+  }
+}
+
+/* Paired buttons stay on one line on narrow phones. */
+.button-row .secondary {
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+/* Keyboard shortcut hints are meaningless on touch screens (this must come after .shortcut-hint). */
+@media (pointer: coarse) {
+  .shortcut-hint {
+    display: none;
   }
 }
