@@ -16,7 +16,7 @@ export interface ShopItem {
 }
 
 export const CATALOG: readonly ShopItem[] = [
-  { id: 'paint-classic', category: 'paint', name: 'Classic Yellow', price: 0, blurb: 'The one everyone waves at.' },
+  { id: 'paint-classic', category: 'paint', name: 'City livery', price: 0, blurb: 'Each city’s signature cab colours.' },
   { id: 'paint-checker', category: 'paint', name: 'Checker Cab', price: 600, blurb: 'A checkerboard band down each side.' },
   { id: 'paint-midnight', category: 'paint', name: 'Midnight', price: 900, blurb: 'Gloss black with yellow trim.' },
   { id: 'paint-mint', category: 'paint', name: 'Mint', price: 900, blurb: 'Fresh, calm, and fast enough.' },
@@ -25,7 +25,7 @@ export const CATALOG: readonly ShopItem[] = [
   { id: 'paint-chrome', category: 'paint', name: 'Chrome', price: 3500, blurb: 'Polished until the robotaxis can see themselves.' },
   { id: 'paint-holo', category: 'paint', name: 'Holographic', price: 6000, blurb: 'Shifts colour as you drive.' },
 
-  { id: 'roof-taxi', category: 'roof', name: 'Taxi Light', price: 0, blurb: 'Lit when you are free for hire.' },
+  { id: 'roof-taxi', category: 'roof', name: 'City sign', price: 0, blurb: 'The local roof sign, lit when you’re free.' },
   { id: 'roof-star', category: 'roof', name: 'Star', price: 500, blurb: 'Five-star service, advertised.' },
   { id: 'roof-heart', category: 'roof', name: 'Heart', price: 800, blurb: 'For drivers who love the job.' },
   { id: 'roof-bolt', category: 'roof', name: 'Lightning', price: 1200, blurb: 'Looks fast. Is exactly as fast.' },

@@ -53,3 +53,22 @@ describe('settings persistence', () => {
     expect(DEFAULT_SETTINGS.sensitivity).toBe(1);
   });
 });
+
+describe('settings remember city, mode and music', () => {
+  it('defaults to New York, Normal, music on', () => {
+    expect(DEFAULT_SETTINGS.city).toBe('new-york');
+    expect(DEFAULT_SETTINGS.mode).toBe('normal');
+    expect(DEFAULT_SETTINGS.music).toBe(true);
+  });
+  it('keeps valid choices and rejects unknown ones', () => {
+    const s = parseSettings(JSON.stringify({ city: 'tokyo', mode: 'extreme', music: false }));
+    expect([s.city, s.mode, s.music]).toEqual(['tokyo', 'extreme', false]);
+    const bad = parseSettings(JSON.stringify({ city: 'atlantis', mode: 'godlike', music: 'loud' }));
+    expect([bad.city, bad.mode, bad.music]).toEqual(['new-york', 'normal', true]);
+  });
+  it('offers steering presets', async () => {
+    const { STEERING_PRESETS } = await import('../src/core/settings');
+    expect(STEERING_PRESETS.map((p) => p.label)).toEqual(['Gentle', 'Standard', 'Sharp']);
+    expect(STEERING_PRESETS.find((p) => p.label === 'Standard')!.value).toBe(1);
+  });
+});
