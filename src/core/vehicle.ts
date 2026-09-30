@@ -39,6 +39,8 @@ export interface Vehicle {
   radius: number;
   /** True if the last update hit a wall — the renderer shakes/sparks on this. */
   bumped: boolean;
+  /** Speed straight into the wall on the last update's collision (0 if none). */
+  impact: number;
 }
 
 export interface DriveInput {
@@ -54,6 +56,7 @@ export const createVehicle = (pos: Vec, heading: number, radius = 13): Vehicle =
   speed: 0,
   radius,
   bumped: false,
+  impact: 0,
 });
 
 export function collidesAt(map: CityMap, p: Vec, r: number): boolean {
@@ -98,13 +101,21 @@ export function updateVehicle(v: Vehicle, input: DriveInput, dt: number, map: Ci
 
   // Move each axis separately so the car slides along walls.
   v.bumped = false;
+  v.impact = 0;
   const dx = Math.cos(v.heading) * v.speed * dt;
   const dy = Math.sin(v.heading) * v.speed * dt;
   const nx = { x: v.pos.x + dx, y: v.pos.y };
   if (!collidesAt(map, nx, v.radius)) v.pos.x = nx.x;
-  else v.bumped = true;
+  else {
+    v.bumped = true;
+    v.impact = Math.max(v.impact, Math.abs(Math.cos(v.heading) * v.speed));
+  }
   const ny = { x: v.pos.x, y: v.pos.y + dy };
   if (!collidesAt(map, ny, v.radius)) v.pos.y = ny.y;
-  else v.bumped = true;
-  if (v.bumped) v.speed *= 0.92;
+  else {
+    v.bumped = true;
+    v.impact = Math.max(v.impact, Math.abs(Math.sin(v.heading) * v.speed));
+  }
+  // A head-on crash kills most of your speed; a scrape just scrubs a little.
+  if (v.bumped) v.speed *= v.impact > 80 ? 0.35 : 0.92;
 }

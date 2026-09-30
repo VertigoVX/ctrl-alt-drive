@@ -5,6 +5,8 @@ import {
 } from './city';
 import { dist, type Vec } from './math';
 import { distanceField, findPath } from './pathfinding';
+import { MODES, type ModeId, type ModeRules } from './modes';
+import { PASSENGER_KINDS, pickPassenger, type PassengerKind } from './passengers';
 import { createRng, type Rng } from './rng';
 import { createVehicle, DEFAULT_HANDLING, updateVehicle, type DriveInput, type Vehicle } from './vehicle';
 
@@ -31,10 +33,20 @@ export const GAME_RULES = {
   maxPowerups: 2,
   pickupRadius: 30,
   catchRadius: 24,
+  /** Impacts slower than this (world units/s straight into a wall) do no damage. */
+  damageThreshold: 60,
+  /** Health lost by a full-speed head-on crash at damage scale 1. */
+  crashDamage: 40,
+  damageCooldown: 0.35,
+  repairAmount: 50,
+  /** Health needed at drop-off for the clean-cab bonuses. */
+  mintCondition: 90,
+  tipChance: 0.45,
+  perkChance: 0.35,
 };
 
 export type Phase = 'ready' | 'playing' | 'caught' | 'over';
-export type PowerupKind = 'reboot' | 'surge';
+export type PowerupKind = 'reboot' | 'surge' | 'repair';
 
 export interface Powerup {
   kind: PowerupKind;
@@ -44,6 +56,7 @@ export interface Powerup {
 export interface Job {
   stage: 'pickup' | 'dropoff';
   passenger: string;
+  kind: PassengerKind;
   pickup: Vec;
   pickupTile: Point;
   pickupLabel: string;
@@ -61,6 +74,10 @@ export type GameEvent =
   | { type: 'dropoff'; fare: number; bonus: number }
   | { type: 'fareExpired'; passenger: string }
   | { type: 'caught' }
+  | { type: 'damage'; amount: number }
+  | { type: 'wrecked' }
+  | { type: 'tip'; amount: number; passenger: string }
+  | { type: 'perk'; kind: PowerupKind }
   | { type: 'gameOver' }
   | { type: 'spawn' }
   | { type: 'spotted'; id: number }
@@ -71,6 +88,11 @@ export type GameEvent =
 
 export interface GameState {
   seed: number;
+  mode: ModeId;
+  rules: ModeRules;
+  /** 0–100. */
+  health: number;
+  damageCooldown: number;
   map: CityMap;
   rng: Rng;
   taxi: Vehicle;
@@ -95,11 +117,14 @@ export interface GameState {
   powerupTimer: number;
   routeTimer: number;
   nextAvId: number;
+  passengerNames: readonly string[];
 }
 
-const PASSENGERS = [
+export const DEFAULT_PASSENGERS = [
   'Maya', 'Theo', 'Priya', 'Jonah', 'Amara', 'Luis', 'Nadia', 'Kenji', 'Zanele', 'Oscar',
   'Ines', 'Tariq', 'Freya', 'Sipho', 'Mei', 'Rafael', 'Lerato', 'Hugo', 'Ayla', 'Dmitri',
+  'Chidi', 'Sofia', 'Arjun', 'Leila', 'Mateo', 'Hana', 'Kwame', 'Elif', 'Noah', 'Yuki',
+  'Thandi', 'Omar', 'Clara', 'Ravi', 'Ingrid', 'Diego', 'Aiko', 'Femi', 'Lucia', 'Bongani',
 ];
 
 const addressOf = (map: CityMap, t: Point) => `${100 + ((t.x * 37 + t.y * 53) % 880)} ${streetNameAt(map, t.x, t.y)}`;
@@ -117,8 +142,9 @@ function farthest(map: CityMap, field: Int32Array, fraction: number): Point[] {
   return tilesWithin(map, field, cut, Infinity);
 }
 
-function newJob(g: GameState, passenger?: string): Job {
+function newJob(g: GameState): Job {
   const { map, rng } = g;
+  const passenger = pickPassenger(rng, g.passengerNames);
   const from = worldToTile(map, g.taxi.pos);
   const f1 = distanceField(map, from);
   let pickups = tilesWithin(map, f1, 8, 22);
@@ -130,10 +156,12 @@ function newJob(g: GameState, passenger?: string): Job {
   const dropoffTile = rng.pick(drops);
   const routeTiles = f1[pickupTile.y * map.width + pickupTile.x] + f2[dropoffTile.y * map.width + dropoffTile.x];
   const tilesPerSecond = GAME_RULES.referenceSpeed / map.tileSize;
-  const timeTotal = Math.round(routeTiles / tilesPerSecond * 1.8 + 10);
+  const kind = PASSENGER_KINDS[passenger.kind];
+  const timeTotal = Math.round((routeTiles / tilesPerSecond * 1.8 + 10) * kind.meterMultiplier * g.rules.meterScale);
   return {
     stage: 'pickup',
-    passenger: passenger ?? rng.pick(PASSENGERS),
+    passenger: passenger.name,
+    kind: passenger.kind,
     pickup: tileCenter(map, pickupTile.x, pickupTile.y),
     pickupTile,
     pickupLabel: addressOf(map, pickupTile),
@@ -157,7 +185,7 @@ export function spawnAv(g: GameState): boolean {
   if (!t) return false;
   const n = g.rng.pick(drivableNeighbours(g.map, t.x, t.y));
   const av = createAutonomous(g.nextAvId++, g.map, t, Math.atan2(n.y - t.y, n.x - t.x));
-  av.speedScale = GAME_RULES.avSpeedScale(g.level);
+  av.speedScale = GAME_RULES.avSpeedScale(g.level) * g.rules.avSpeed;
   g.avs.push(av);
   return true;
 }
@@ -171,6 +199,8 @@ function refreshRoute(g: GameState) {
 
 export interface GameOptions {
   seed: number;
+  mode?: ModeId;
+  passengerNames?: readonly string[];
   width?: number;
   height?: number;
 }
@@ -184,13 +214,16 @@ export function createGame(opts: GameOptions): GameState {
   const start = roads.reduce((a, b) => (Math.hypot(b.x - mid.x, b.y - mid.y) < Math.hypot(a.x - mid.x, a.y - mid.y) ? b : a));
   const taxi = createVehicle(tileCenter(map, start.x, start.y), 0);
 
+  const rules = MODES[opts.mode ?? 'normal'];
   const g: GameState = {
-    seed: opts.seed, map, rng, taxi, avs: [], route: [], powerups: [],
+    seed: opts.seed, mode: rules.id, rules, health: 100, damageCooldown: 0,
+    passengerNames: opts.passengerNames ?? DEFAULT_PASSENGERS,
+    map, rng, taxi, avs: [], route: [], powerups: [],
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,
-    score: 0, lives: GAME_RULES.lives, fares: 0, level: 1, escapes: 0, recycled: 0,
+    score: 0, lives: rules.lives, fares: 0, level: 1, escapes: 0, recycled: 0,
     invulnerable: 0, boostTime: 0, steeringSensitivity: 1,
-    spawnTimer: GAME_RULES.spawnInterval(1), powerupTimer: GAME_RULES.powerupInterval, routeTimer: 0,
+    spawnTimer: GAME_RULES.spawnInterval(1) * rules.spawnScale, powerupTimer: GAME_RULES.powerupInterval, routeTimer: 0,
     nextAvId: 1,
   };
   g.job = newJob(g);
@@ -232,6 +265,24 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   const handling = { ...DEFAULT_HANDLING, turnRate: DEFAULT_HANDLING.turnRate * g.steeringSensitivity };
   updateVehicle(g.taxi, input, dt, g.map, g.boostTime > 0 ? GAME_RULES.surgeBoost : 1, handling);
 
+  // Crashes dent the cab.
+  g.damageCooldown = Math.max(0, g.damageCooldown - dt);
+  if (g.taxi.impact > GAME_RULES.damageThreshold && g.damageCooldown <= 0) {
+    const severity = (g.taxi.impact - GAME_RULES.damageThreshold) / (DEFAULT_HANDLING.maxSpeed - GAME_RULES.damageThreshold);
+    const amount = Math.round(Math.min(1.4, severity) * GAME_RULES.crashDamage * g.rules.damageScale);
+    if (amount > 0) {
+      g.health = Math.max(0, g.health - amount);
+      g.damageCooldown = GAME_RULES.damageCooldown;
+      events.push({ type: 'damage', amount });
+      if (g.health <= 0 && g.rules.wrecks) {
+        events.push({ type: 'wrecked' });
+        g.health = 100; // the next cab off the rank is a fresh one
+        loseCab(g, events);
+        return events;
+      }
+    }
+  }
+
   // Fleet.
   const tuning = DEFAULT_AV_TUNING;
   for (const av of g.avs) {
@@ -250,12 +301,16 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
     g.powerupTimer = GAME_RULES.powerupInterval;
     if (g.powerups.length < GAME_RULES.maxPowerups) {
       const t = randomRoadAwayFrom(g, g.taxi.pos, 6);
-      if (t) g.powerups.push({ kind: g.rng.chance(0.4) ? 'reboot' : 'surge', pos: tileCenter(g.map, t.x, t.y) });
+      if (t) {
+        const kind: PowerupKind = g.health < 100 && g.rng.chance(0.3) ? 'repair' : g.rng.chance(0.4) ? 'reboot' : 'surge';
+        g.powerups.push({ kind, pos: tileCenter(g.map, t.x, t.y) });
+      }
     }
   }
   g.powerups = g.powerups.filter((p) => {
     if (dist(p.pos, g.taxi.pos) > GAME_RULES.pickupRadius) return true;
     if (p.kind === 'surge') g.boostTime = GAME_RULES.surgeTime;
+    else if (p.kind === 'repair') g.health = Math.min(100, g.health + GAME_RULES.repairAmount);
     else
       for (const av of g.avs) {
         av.state = 'rebooting';
@@ -270,26 +325,17 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   const touching = g.avs.filter((av) => dist(av.pos, g.taxi.pos) < GAME_RULES.catchRadius);
   for (const av of touching.filter((a) => a.state === 'rebooting')) {
     g.avs.splice(g.avs.indexOf(av), 1);
-    g.score += GAME_RULES.recyclePoints;
+    const points = Math.round(GAME_RULES.recyclePoints * g.rules.cashMultiplier);
+    g.score += points;
     g.recycled++;
-    events.push({ type: 'recycled', points: GAME_RULES.recyclePoints });
+    events.push({ type: 'recycled', points });
   }
   if (g.invulnerable <= 0 && touching.some((a) => a.state !== 'rebooting')) {
-    g.lives--;
     events.push({ type: 'caught' });
     // The robotaxi drives off with your passenger, and the cars around you clear out.
     g.avs = g.avs.filter((av) => dist(av.pos, g.taxi.pos) > 6 * g.map.tileSize);
-    g.taxi.speed = 0;
-    if (g.lives <= 0) {
-      g.phase = 'over';
-      g.phaseTime = 0;
-      events.push({ type: 'gameOver' });
-      return events;
-    }
-    g.phase = 'caught';
-    g.phaseTime = 0;
-    g.job = newJob(g);
-    refreshRoute(g);
+    if (g.rules.repairOnCaught) g.health = 100;
+    loseCab(g, events);
     return events;
   }
 
@@ -301,11 +347,32 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
     events.push({ type: 'pickup', passenger: job.passenger });
     g.routeTimer = 0;
   } else if (job.stage === 'dropoff' && dist(g.taxi.pos, job.dropoff) < GAME_RULES.pickupRadius) {
+    const kind = PASSENGER_KINDS[job.kind];
+    const scale = kind.fareMultiplier * g.rules.cashMultiplier;
     const bonus = Math.round(job.timeLeft * GAME_RULES.bonusPerSecond);
-    const fare = GAME_RULES.baseFare + bonus;
+    const fare = Math.round((GAME_RULES.baseFare + bonus) * scale);
     g.score += fare;
     g.fares++;
-    events.push({ type: 'dropoff', fare, bonus });
+    events.push({ type: 'dropoff', fare, bonus: Math.round(bonus * scale) });
+    // Clean-cab bonuses: a tip, or failing that maybe a perk dropped nearby.
+    if (g.health >= GAME_RULES.mintCondition) {
+      if (g.rng.chance(GAME_RULES.tipChance + kind.tipBias)) {
+        const amount = Math.round(fare * (0.2 + g.rng.next() * 0.3));
+        g.score += amount;
+        events.push({ type: 'tip', amount, passenger: job.passenger });
+      } else if (g.rng.chance(GAME_RULES.perkChance)) {
+        const near = roadTiles(g.map).filter((t) => {
+          const d = dist(tileCenter(g.map, t.x, t.y), g.taxi.pos) / g.map.tileSize;
+          return d >= 3 && d <= 7;
+        });
+        if (near.length) {
+          const t = g.rng.pick(near);
+          const kindOf: PowerupKind = g.health < 100 ? 'repair' : g.rng.chance(0.5) ? 'surge' : 'reboot';
+          g.powerups.push({ kind: kindOf, pos: tileCenter(g.map, t.x, t.y) });
+          events.push({ type: 'perk', kind: kindOf });
+        }
+      }
+    }
     const level = 1 + Math.floor(g.fares / GAME_RULES.faresPerLevel);
     if (level > g.level) {
       g.level = level;
@@ -322,8 +389,8 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   // Spawner.
   g.spawnTimer -= dt;
   if (g.spawnTimer <= 0) {
-    g.spawnTimer = GAME_RULES.spawnInterval(g.level);
-    if (g.avs.length < GAME_RULES.maxAvs(g.level) && spawnAv(g)) events.push({ type: 'spawn' });
+    g.spawnTimer = GAME_RULES.spawnInterval(g.level) * g.rules.spawnScale;
+    if (g.avs.length < GAME_RULES.maxAvs(g.level) + g.rules.maxAvsBonus && spawnAv(g)) events.push({ type: 'spawn' });
   }
 
   g.routeTimer -= dt;
@@ -332,4 +399,20 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
     g.routeTimer = 0.25;
   }
   return events;
+}
+
+/** Lose the current cab (caught or wrecked): passenger gone, brief pause, or game over. */
+function loseCab(g: GameState, events: GameEvent[]) {
+  g.lives--;
+  g.taxi.speed = 0;
+  if (g.lives <= 0) {
+    g.phase = 'over';
+    g.phaseTime = 0;
+    events.push({ type: 'gameOver' });
+    return;
+  }
+  g.phase = 'caught';
+  g.phaseTime = 0;
+  g.job = newJob(g);
+  refreshRoute(g);
 }
