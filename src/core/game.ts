@@ -28,7 +28,7 @@ export const GAME_RULES = {
   referenceSpeed: 200,
   caughtPause: 1.6,
   graceTime: 2.5,
-  surgeTime: 4,
+  surgeTime: 5,
   surgeBoost: 1.4,
   powerupInterval: 14,
   maxPowerups: 2,

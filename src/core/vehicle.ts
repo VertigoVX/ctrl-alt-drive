@@ -15,6 +15,8 @@ export interface Handling {
   /** Fraction of full acceleration available from a standstill; builds to 1 by `launchSpeed`. */
   launchGrip: number;
   launchSpeed: number;
+  /** How fast (world units/s) the cab drifts back to its lane centre when not steering. */
+  laneKeep: number;
 }
 
 export const DEFAULT_HANDLING: Handling = {
@@ -30,6 +32,7 @@ export const DEFAULT_HANDLING: Handling = {
   // Gentle pull-away: players were launching into walls from a standstill.
   launchGrip: 0.35,
   launchSpeed: 140,
+  laneKeep: 40,
 };
 
 export interface Vehicle {
@@ -102,6 +105,9 @@ export function updateVehicle(v: Vehicle, input: DriveInput, dt: number, map: Ci
   // Move each axis separately so the car slides along walls.
   v.bumped = false;
   v.impact = 0;
+  // Corner assist only follows the main direction of travel: a slight sideways drift into a
+  // kerb isn't an intent to turn, and assisting both axes can cancel out and pin the cab.
+  const mainlyX = Math.abs(Math.cos(v.heading)) >= Math.abs(Math.sin(v.heading));
   const dx = Math.cos(v.heading) * v.speed * dt;
   const dy = Math.sin(v.heading) * v.speed * dt;
   const nx = { x: v.pos.x + dx, y: v.pos.y };
@@ -109,13 +115,55 @@ export function updateVehicle(v: Vehicle, input: DriveInput, dt: number, map: Ci
   else {
     v.bumped = true;
     v.impact = Math.max(v.impact, Math.abs(Math.cos(v.heading) * v.speed));
+    if (mainlyX) cornerAssist(v, map, 'x', Math.sign(dx), Math.abs(v.speed) * dt);
   }
   const ny = { x: v.pos.x, y: v.pos.y + dy };
   if (!collidesAt(map, ny, v.radius)) v.pos.y = ny.y;
   else {
     v.bumped = true;
     v.impact = Math.max(v.impact, Math.abs(Math.sin(v.heading) * v.speed));
+    if (!mainlyX) cornerAssist(v, map, 'y', Math.sign(dy), Math.abs(v.speed) * dt);
   }
-  // A head-on crash kills most of your speed; a scrape just scrubs a little.
-  if (v.bumped) v.speed *= v.impact > 80 ? 0.35 : 0.92;
+  // Lane keeping: when the player isn't steering, ease the cab back to the middle of the
+  // lane it's driving along. Pairs with the heading lane assist above.
+  if (input.steer === 0 && Math.abs(v.speed) > 40) {
+    const ts = map.tileSize;
+    const across = mainlyX ? v.pos.y : v.pos.x;
+    const centre = (Math.floor(across / ts) + 0.5) * ts;
+    const gap = centre - across;
+    const shift = Math.sign(gap) * Math.min(Math.abs(gap), h.laneKeep * dt);
+    const p = mainlyX ? { x: v.pos.x, y: v.pos.y + shift } : { x: v.pos.x + shift, y: v.pos.y };
+    if (shift && !collidesAt(map, p, v.radius)) v.pos = p;
+  }
+
+  // A head-on crash kills most of your speed, a knock scrubs some, and a glancing graze along
+  // a kerb barely slows you (it used to bleed 8% per frame, which left cabs crawling along walls).
+  if (v.bumped) v.speed *= v.impact > 80 ? 0.35 : v.impact > 30 ? 0.92 : 0.99;
+}
+
+/**
+ * Blocked while pushing along one axis? If an open street lies that way from a lane the cab
+ * is partly in, ease the cab sideways onto that lane's centre line so it slides into the street
+ * rather than grinding on the corner. Only ever moves toward the centre of an open lane.
+ */
+function cornerAssist(v: Vehicle, map: CityMap, axis: 'x' | 'y', dir: number, step: number) {
+  if (!dir || step <= 0) return;
+  const ts = map.tileSize;
+  const along = axis === 'x' ? v.pos.x : v.pos.y;
+  const across = axis === 'x' ? v.pos.y : v.pos.x;
+  const ahead = Math.floor((along + dir * (v.radius + 2)) / ts);
+  const here = Math.floor(along / ts);
+  let best: number | null = null;
+  for (let lane = Math.floor((across - v.radius) / ts); lane <= Math.floor((across + v.radius) / ts); lane++) {
+    const open = (a: number) => isDrivable(axis === 'x' ? tileAt(map, a, lane) : tileAt(map, lane, a));
+    if (!open(ahead) || !open(here)) continue;
+    const centre = (lane + 0.5) * ts;
+    if (best === null || Math.abs(centre - across) < Math.abs(best - across)) best = centre;
+  }
+  if (best === null || Math.abs(best - across) < 0.5) return;
+  const move = Math.sign(best - across) * Math.min(Math.abs(best - across), Math.max(step, 0.6));
+  const p = axis === 'x' ? { x: v.pos.x, y: v.pos.y + move } : { x: v.pos.x + move, y: v.pos.y };
+  // Allowed if it's clear, or if the cab is already wedged on the corner (then any move toward
+  // the open lane's centre line is a move out of the wall, never further in).
+  if (!collidesAt(map, p, v.radius) || collidesAt(map, v.pos, v.radius)) v.pos = p;
 }

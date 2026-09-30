@@ -5,7 +5,7 @@ import { CITIES, cityById, type CityDef } from './core/cities';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
 import { MODES, type ModeId } from './core/modes';
 import { PASSENGER_KINDS } from './core/passengers';
-import { inputFromKeys, inputFromStick } from './core/input';
+import { createStickMemory, inputFromKeys, inputFromStick } from './core/input';
 import { createRng } from './core/rng';
 import { parseSettings, STEERING_PRESETS, type Settings, type ThemeId } from './core/settings';
 import { addEarnings, availableThemes, CATALOG, equip, parseProfile, type Profile } from './core/shop';
@@ -544,6 +544,8 @@ function measureInsets() {
 
 const keys = new Set<string>();
 let stick: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
+// Remembers three-point-turn progress between frames; fresh for every new touch.
+let stickMemory = createStickMemory();
 
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -583,6 +585,7 @@ window.addEventListener('pointerdown', (e) => {
   if (mode !== 'playing' || e.pointerType === 'mouse') return;
   if ((e.target as HTMLElement).closest('button, .sheet, .banner')) return;
   stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 };
+  stickMemory = createStickMemory();
   const el = $('stick');
   el.style.left = `${e.clientX}px`;
   el.style.top = `${e.clientY}px`;
@@ -611,7 +614,7 @@ window.addEventListener('pointercancel', endStick);
 function currentInput(): DriveInput {
   const k = inputFromKeys(keys);
   if (k.throttle || k.steer) return k;
-  if (stick) return inputFromStick(stick, game.taxi.heading);
+  if (stick) return inputFromStick(stick, game.taxi, stickMemory);
   return { throttle: 0, steer: 0 };
 }
 

@@ -32,7 +32,7 @@ export const DEFAULT_AV_TUNING: AvTuning = {
   alertTime: 0.4,
   memory: 0.8,
   searchTime: 3.5,
-  rebootTime: 6,
+  rebootTime: 7,
   visionRange: 300,
   visionHalfAngle: 0.5,
   chaseVisionRange: 380,

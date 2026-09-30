@@ -94,3 +94,68 @@ describe('vehicle handling', () => {
     expect(v.speed).toBeGreaterThan(DEFAULT_HANDLING.maxSpeed * 1.2);
   });
 });
+
+describe('corner assist', () => {
+  // A cab half in the side street, half across the junction, pushing west into the corner.
+  const loop = makeMap([
+    '#########',
+    '#.......#',
+    '#.#####.#',
+    '#.......#',
+    '#########',
+  ]);
+
+  it('slides into the street it is pushing towards instead of sticking on the corner', () => {
+    const v = createVehicle({ x: 457, y: 128 }, Math.PI); // straddling row 1 and the building below-left
+    v.speed = 30;
+    for (let t = 0; t < 1.5; t += 1 / 60) updateVehicle(v, { throttle: 1, steer: 0 }, 1 / 60, loop);
+    expect(worldToTile(loop, v.pos)).toEqual(expect.objectContaining({ y: 1 }));
+    expect(v.pos.x).toBeLessThan(400);
+    expect(collidesAt(loop, v.pos, v.radius)).toBe(false);
+  });
+
+  it('does not invent a way through a solid wall', () => {
+    const v = createVehicle(tileCenter(loop, 1, 1), -Math.PI / 2); // facing the northern boundary
+    const x0 = v.pos.x;
+    for (let t = 0; t < 1; t += 1 / 60) updateVehicle(v, { throttle: 1, steer: 0 }, 1 / 60, loop);
+    expect(v.pos.x).toBeCloseTo(x0, 0);
+    expect(worldToTile(loop, v.pos).y).toBe(1);
+  });
+});
+
+describe('corner assist (regression)', () => {
+  it('is not cancelled out by a slight sideways drift into the corner', () => {
+    const loop = makeMap(['#########', '#.......#', '#.#####.#', '#.......#', '#########']);
+    const v = createVehicle({ x: 456, y: 118.7 }, (168 * Math.PI) / 180); // mostly west, drifting south
+    v.speed = 37;
+    for (let t = 0; t < 1.5; t += 1 / 60) updateVehicle(v, { throttle: 1, steer: 0.24 }, 1 / 60, loop);
+    expect(v.pos.x).toBeLessThan(400);
+  });
+});
+
+describe('grazing a kerb', () => {
+  it('barely slows a cab sliding along a wall at a shallow angle', () => {
+    const loop = makeMap(['#########', '#.......#', '#.#####.#', '#.......#', '#########']);
+    const v = createVehicle({ x: 440, y: 114 }, Math.PI - 0.1); // heading west, nudging the kerb below
+    v.speed = 150;
+    for (let t = 0; t < 0.5; t += 1 / 60) updateVehicle(v, { throttle: 0.6, steer: 0 }, 1 / 60, loop);
+    expect(v.speed).toBeGreaterThan(120);
+  });
+});
+
+describe('lane keeping', () => {
+  it('gently re-centres a cab that drifted off its lane when the player is not steering', () => {
+    const loop = makeMap(['##########', '#........#', '##########']);
+    const v = createVehicle({ x: 500, y: 112 }, Math.PI); // 16px below the lane centre (96)
+    v.speed = 200;
+    for (let t = 0; t < 1; t += 1 / 60) updateVehicle(v, { throttle: 1, steer: 0 }, 1 / 60, loop);
+    expect(Math.abs(v.pos.y - 96)).toBeLessThan(4);
+  });
+  it('leaves the cab alone while the player is steering', () => {
+    const loop = makeMap(['##########', '#........#', '##########']);
+    const v = createVehicle({ x: 500, y: 112 }, Math.PI);
+    v.speed = 60;
+    updateVehicle(v, { throttle: 0, steer: 0.5 }, 1 / 60, loop);
+    expect(v.pos.y).toBeGreaterThan(110);
+  });
+});
