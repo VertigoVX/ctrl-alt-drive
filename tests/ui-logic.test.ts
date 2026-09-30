@@ -40,8 +40,11 @@ describe('camera', () => {
   });
 
   it('never shows beyond the edge of the map', () => {
-    const cam = createCamera({ x: 0, y: 0 });
-    updateCamera(cam, { pos: { x: 0, y: 0 }, heading: 0, speed: 0 }, { w: 800, h: 600 }, map, 1);
+    // The outermost tiles are always buildings, so the closest the taxi can get to a
+    // corner is the centre of the ring road's corner tile (1, 1).
+    const corner = { x: 1.5 * 64, y: 1.5 * 64 };
+    const cam = createCamera(corner);
+    updateCamera(cam, { pos: corner, heading: 0, speed: 0 }, { w: 800, h: 600 }, map, 1);
     expect(cam.x - 400 / cam.zoom).toBeGreaterThanOrEqual(0);
     expect(cam.y - 300 / cam.zoom).toBeGreaterThanOrEqual(0);
   });
@@ -127,5 +130,63 @@ describe('camera framing with a side panel (landscape phones)', () => {
     for (let i = 0; i < 400; i++) updateCamera(cam, { pos: { x: 1400, y: 1000 }, heading: 0, speed: 0 }, view, map, 1 / 60, insets);
     const screenX = (1400 - cam.x) * cam.zoom + view.w / 2;
     expect(screenX).toBeCloseTo(insets.left + (view.w - insets.left) / 2, 0);
+  });
+});
+
+describe('the taxi is never hidden behind HUD panels', () => {
+  const map = { width: 44, height: 32, tileSize: 64 } as CityMap;
+  const W = 44 * 64, H = 32 * 64;
+  const SAFE = 40; // screen px of breathing room between the taxi and any panel
+  const portrait = { view: { w: 390, h: 664 }, insets: { top: 100, bottom: 260 } };
+  const landscape = { view: { w: 844, h: 390 }, insets: { top: 0, bottom: 0, left: 320 } };
+
+  function screenPos(setup: typeof portrait | typeof landscape, pos: { x: number; y: number }, heading: number, speed: number, frames = 300) {
+    const cam = createCamera(pos);
+    for (let i = 0; i < frames; i++) updateCamera(cam, { pos, heading, speed }, setup.view, map, 1 / 60, setup.insets);
+    return { x: (pos.x - cam.x) * cam.zoom + setup.view.w / 2, y: (pos.y - cam.y) * cam.zoom + setup.view.h / 2 };
+  }
+  const inGap = (setup: typeof portrait | typeof landscape, p: { x: number; y: number }) => {
+    const i = { left: 0, ...setup.insets };
+    expect(p.y).toBeGreaterThanOrEqual(i.top + SAFE - 0.5);
+    expect(p.y).toBeLessThanOrEqual(setup.view.h - i.bottom - SAFE + 0.5);
+    expect(p.x).toBeGreaterThanOrEqual(i.left + SAFE - 0.5);
+    expect(p.x).toBeLessThanOrEqual(setup.view.w - SAFE + 0.5);
+  };
+
+  it.each([
+    ['bottom edge', { x: 1400, y: H - 96 }, Math.PI / 2],
+    ['top edge', { x: 1400, y: 96 }, -Math.PI / 2],
+    ['bottom-left corner', { x: 96, y: H - 96 }, Math.PI],
+    ['bottom-right corner', { x: W - 96, y: H - 96 }, 0],
+  ])('portrait: stays visible at the %s of the city', (_n, pos, heading) => {
+    inGap(portrait, screenPos(portrait, pos, heading, 120));
+  });
+
+  it.each([
+    ['left edge', { x: 96, y: 1000 }, Math.PI],
+    ['right edge', { x: W - 96, y: 1000 }, 0],
+  ])('landscape: stays visible at the %s of the city', (_n, pos, heading) => {
+    inGap(landscape, screenPos(landscape, pos, heading, 120));
+  });
+
+  it.each([0, Math.PI / 2, Math.PI, -Math.PI / 2])('stays visible at full speed in any direction (heading %f)', (heading) => {
+    inGap(portrait, screenPos(portrait, { x: 1400, y: 1000 }, heading, 380));
+    inGap(landscape, screenPos(landscape, { x: 1400, y: 1000 }, heading, 380));
+  });
+
+  it('stays visible on the very first frame after a teleport (e.g. respawn)', () => {
+    const cam = createCamera({ x: 1400, y: 1000 });
+    for (let i = 0; i < 120; i++) updateCamera(cam, { pos: { x: 1400, y: 1000 }, heading: 0, speed: 0 }, portrait.view, map, 1 / 60, portrait.insets);
+    const jumped = { x: 1400, y: 1600 };
+    updateCamera(cam, { pos: jumped, heading: 0, speed: 0 }, portrait.view, map, 1 / 60, portrait.insets);
+    inGap(portrait, { x: (jumped.x - cam.x) * cam.zoom + 195, y: (jumped.y - cam.y) * cam.zoom + 332 });
+  });
+
+  it('never reveals empty space beyond the city in the visible gap', () => {
+    const cam = createCamera({ x: 1400, y: H - 96 });
+    for (let i = 0; i < 300; i++) updateCamera(cam, { pos: { x: 1400, y: H - 96 }, heading: Math.PI / 2, speed: 100 }, portrait.view, map, 1 / 60, portrait.insets);
+    // World y at the bottom of the visible gap must still be inside the map.
+    const gapBottomWorldY = cam.y + (portrait.view.h - portrait.insets.bottom - portrait.view.h / 2) / cam.zoom;
+    expect(gapBottomWorldY).toBeLessThanOrEqual(H + 0.5);
   });
 });

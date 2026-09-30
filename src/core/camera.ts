@@ -14,6 +14,12 @@ export interface Follow {
   speed: number;
 }
 
+/** Screen pixels kept between the taxi and any HUD panel. */
+export const SAFE_MARGIN = 40;
+
+/** Clamp into [min, max]; if the range is inverted (too little room), sit in its middle. */
+const clampRange = (v: number, min: number, max: number) => (min > max ? (min + max) / 2 : clamp(v, min, max));
+
 export const createCamera = (at: Vec): Camera => ({ x: at.x, y: at.y, zoom: 0.9, shake: 0 });
 
 /** Screen space covered by HUD panels; the taxi is framed in the gap between them. */
@@ -47,11 +53,24 @@ export function updateCamera(
   cam.x = lerp(cam.x, wantX, k);
   cam.y = lerp(cam.y, wantY, k);
 
+  // 1. Stay over the city. The camera may scroll past a map edge by exactly the
+  //    width of the panel covering that edge, so the taxi can reach the edge of the
+  //    *visible* area without ever revealing empty space beyond the city.
+  const top = insets.top;
+  const bottom = insets.bottom;
+  const left = insets.left ?? 0;
   const worldW = map.width * map.tileSize;
   const worldH = map.height * map.tileSize;
   const halfW = view.w / 2 / cam.zoom;
   const halfH = view.h / 2 / cam.zoom;
-  cam.x = halfW * 2 >= worldW ? worldW / 2 : clamp(cam.x, halfW, worldW - halfW);
-  cam.y = halfH * 2 >= worldH ? worldH / 2 : clamp(cam.y, halfH, worldH - halfH);
+  cam.x = clampRange(cam.x, halfW - left / cam.zoom, worldW - halfW);
+  cam.y = clampRange(cam.y, halfH - top / cam.zoom, worldH - halfH + bottom / cam.zoom);
+
+  // 2. Hard guarantee: whatever easing, look-ahead or a respawn did, the taxi ends the
+  //    frame inside the gap between panels, with some breathing room.
+  const minX = left + SAFE_MARGIN, maxX = view.w - SAFE_MARGIN;
+  const minY = top + SAFE_MARGIN, maxY = view.h - bottom - SAFE_MARGIN;
+  cam.x = clampRange(cam.x, target.pos.x - (maxX - view.w / 2) / cam.zoom, target.pos.x - (minX - view.w / 2) / cam.zoom);
+  cam.y = clampRange(cam.y, target.pos.y - (maxY - view.h / 2) / cam.zoom, target.pos.y - (minY - view.h / 2) / cam.zoom);
   cam.shake = Math.max(0, cam.shake - dt * 2);
 }
