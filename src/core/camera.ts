@@ -16,16 +16,33 @@ export interface Follow {
 
 export const createCamera = (at: Vec): Camera => ({ x: at.x, y: at.y, zoom: 0.9, shake: 0 });
 
-export function updateCamera(cam: Camera, target: Follow, view: { w: number; h: number }, map: CityMap, dt: number) {
+/** Screen space covered by HUD panels; the taxi is framed in the gap between them. */
+export interface Insets {
+  top: number;
+  bottom: number;
+}
+
+export function updateCamera(
+  cam: Camera,
+  target: Follow,
+  view: { w: number; h: number },
+  map: CityMap,
+  dt: number,
+  insets: Insets = { top: 0, bottom: 0 },
+) {
   const k = Math.min(1, 3 * dt);
   const speedRatio = clamp(Math.abs(target.speed) / 270, 0, 1.4);
-  // Small screens get a slightly wider view so you can see what's coming.
-  const base = clamp(Math.min(view.w, view.h) / 820, 0.62, 0.95);
-  cam.zoom = lerp(cam.zoom, base * (1.1 - speedRatio * 0.2), Math.min(1, 1.5 * dt));
+  // Show ~7.5 tiles across the short side on a phone, up to ~12.5 on a big screen:
+  // phones get closer in so cars and street names stay legible.
+  const short = Math.min(view.w, view.h);
+  const tilesAcross = clamp(short / 60, 7.5, 12.5);
+  const base = short / (tilesAcross * map.tileSize);
+  cam.zoom = lerp(cam.zoom, base * (1 - speedRatio * 0.15), Math.min(1, 1.5 * dt));
 
   const lookAhead = target.speed * 0.45;
   const wantX = target.pos.x + Math.cos(target.heading) * lookAhead;
-  const wantY = target.pos.y + Math.sin(target.heading) * lookAhead;
+  // Offset so the taxi sits centred in the unobstructed part of the screen.
+  const wantY = target.pos.y + Math.sin(target.heading) * lookAhead - (insets.top - insets.bottom) / 2 / cam.zoom;
   cam.x = lerp(cam.x, wantX, k);
   cam.y = lerp(cam.y, wantY, k);
 

@@ -86,3 +86,34 @@ describe('formatting', () => {
     expect(arrive.instruction).toBe('Arrive on Juniper St');
   });
 });
+
+describe('camera framing on different screens', () => {
+  const map = { width: 44, height: 32, tileSize: 64 } as CityMap;
+  const settle = (view: { w: number; h: number }, insets?: { top: number; bottom: number }) => {
+    const cam = createCamera({ x: 1400, y: 1000 });
+    for (let i = 0; i < 400; i++)
+      updateCamera(cam, { pos: { x: 1400, y: 1000 }, heading: 0, speed: 0 }, view, map, 1 / 60, insets);
+    return cam;
+  };
+  const tilesAcross = (cam: { zoom: number }, view: { w: number; h: number }) => Math.min(view.w, view.h) / cam.zoom / 64;
+
+  it('keeps cars readable on a phone: about 7.5 tiles across the short side', () => {
+    const view = { w: 390, h: 664 };
+    expect(tilesAcross(settle(view), view)).toBeGreaterThan(7);
+    expect(tilesAcross(settle(view), view)).toBeLessThan(8);
+  });
+
+  it('shows more of the city on a desktop: about 12.5 tiles across', () => {
+    const view = { w: 1280, h: 800 };
+    expect(tilesAcross(settle(view), view)).toBeGreaterThan(12);
+    expect(tilesAcross(settle(view), view)).toBeLessThan(13);
+  });
+
+  it('frames the taxi in the middle of the space the HUD leaves free', () => {
+    const view = { w: 390, h: 664 };
+    const insets = { top: 100, bottom: 260 };
+    const cam = settle(view, insets);
+    const screenY = (1000 - cam.y) * cam.zoom + view.h / 2;
+    expect(screenY).toBeCloseTo(insets.top + (view.h - insets.top - insets.bottom) / 2, 0);
+  });
+});
