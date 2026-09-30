@@ -190,3 +190,14 @@ describe('the taxi is never hidden behind HUD panels', () => {
     expect(gapBottomWorldY).toBeLessThanOrEqual(H + 0.5);
   });
 });
+
+describe('isObscured (fallback: panels turn see-through if they ever cover the taxi)', () => {
+  it('detects when the taxi overlaps a panel, allowing for the size of the cab', async () => {
+    const { isObscured } = await import('../src/core/camera');
+    const sheet = { left: 0, top: 500, right: 390, bottom: 664 };
+    expect(isObscured({ x: 200, y: 560 }, 16, sheet)).toBe(true); // fully under
+    expect(isObscured({ x: 200, y: 490 }, 16, sheet)).toBe(true); // nose poking under the edge
+    expect(isObscured({ x: 200, y: 470 }, 16, sheet)).toBe(false); // clear
+    expect(isObscured({ x: 420, y: 560 }, 16, sheet)).toBe(false); // off to the side
+  });
+});

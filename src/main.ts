@@ -1,5 +1,5 @@
 import { updateAutonomous, DEFAULT_AV_TUNING } from './core/autonomous';
-import { createCamera, updateCamera, type Insets } from './core/camera';
+import { createCamera, isObscured, updateCamera, type Insets, type ScreenRect } from './core/camera';
 import { describeDirections, formatClock } from './core/format';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
 import { inputFromKeys, inputFromStick } from './core/input';
@@ -28,6 +28,8 @@ const fmt = (n: number) => n.toLocaleString('en-US');
 const money = (n: number) => `$${fmt(n)}`;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const landscapePhone = window.matchMedia('(max-height: 500px) and (orientation: landscape)');
+
+declare const __BUILD__: string;
 
 const ICONS = {
   left: '<svg viewBox="0 0 44 44"><path d="M30 38V22a6 6 0 0 0-6-6H10"/><path d="M17 8l-8 8 8 8"/></svg>',
@@ -405,7 +407,10 @@ function updateHud() {
 /** Where the HUD panels sit, so the camera can frame the taxi in the visible gap. */
 let insets: Required<Insets> = { top: 0, bottom: 0, left: 0 };
 let insetTimer = 0;
+let panelRects: { el: HTMLElement; rect: ScreenRect }[] = [];
 function measureInsets() {
+  const panels = [document.querySelector<HTMLElement>('.sheet')!, $('banner')];
+  panelRects = panels.map((el) => ({ el, rect: el.getBoundingClientRect() }));
   if (mode !== 'playing') {
     insets = { top: 0, bottom: 0, left: 0 };
     return;
@@ -525,6 +530,13 @@ function frame(now: number) {
     }
     updateCamera(cam, game.taxi, view, game.map, dt, insets);
     updateHud();
+    // Belt and braces: if a panel ever does cover the cab (some browser quirk the camera
+    // didn't anticipate), make that panel see-through until the cab is clear.
+    const taxiOnScreen = {
+      x: (game.taxi.pos.x - cam.x) * cam.zoom + view.w / 2,
+      y: (game.taxi.pos.y - cam.y) * cam.zoom + view.h / 2,
+    };
+    for (const { el, rect } of panelRects) el.classList.toggle('see-through', isObscured(taxiOnScreen, 20 * cam.zoom, rect));
   } else if (mode === 'title' || (mode === 'garage' && returnMode === 'title') || (mode === 'settings' && returnMode === 'title')) {
     // Attract mode: the fleet roams while the camera drifts across town.
     attractT += dt;
@@ -554,6 +566,7 @@ function frame(now: number) {
 
 applyTheme();
 applySound();
+$('buildLabel').textContent = `Build ${__BUILD__}`;
 for (let i = 0; i < 5; i++) spawnAv(game);
 setMode('title');
 requestAnimationFrame(frame);

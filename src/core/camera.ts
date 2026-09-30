@@ -74,3 +74,15 @@ export function updateCamera(
   cam.y = clampRange(cam.y, target.pos.y - (maxY - view.h / 2) / cam.zoom, target.pos.y - (minY - view.h / 2) / cam.zoom);
   cam.shake = Math.max(0, cam.shake - dt * 2);
 }
+
+export interface ScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Does a panel cover any part of the cab (a circle of `radius` screen px at `p`)? */
+export function isObscured(p: { x: number; y: number }, radius: number, r: ScreenRect): boolean {
+  return p.x + radius > r.left && p.x - radius < r.right && p.y + radius > r.top && p.y - radius < r.bottom;
+}
