@@ -117,3 +117,15 @@ describe('camera framing on different screens', () => {
     expect(screenY).toBeCloseTo(insets.top + (view.h - insets.top - insets.bottom) / 2, 0);
   });
 });
+
+describe('camera framing with a side panel (landscape phones)', () => {
+  it('frames the taxi in the middle of the space right of a docked panel', () => {
+    const map = { width: 44, height: 32, tileSize: 64 } as CityMap;
+    const view = { w: 844, h: 390 };
+    const insets = { top: 0, bottom: 0, left: 320 };
+    const cam = createCamera({ x: 1400, y: 1000 });
+    for (let i = 0; i < 400; i++) updateCamera(cam, { pos: { x: 1400, y: 1000 }, heading: 0, speed: 0 }, view, map, 1 / 60, insets);
+    const screenX = (1400 - cam.x) * cam.zoom + view.w / 2;
+    expect(screenX).toBeCloseTo(insets.left + (view.w - insets.left) / 2, 0);
+  });
+});

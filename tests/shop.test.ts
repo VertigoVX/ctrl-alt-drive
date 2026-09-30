@@ -123,3 +123,14 @@ describe('map styles', () => {
     expect(availableThemes(r.profile)).toEqual(['night', 'day', 'blueprint']);
   });
 });
+
+describe('map style ↔ theme mapping (garage UI helpers)', () => {
+  it('maps items to themes and back', async () => {
+    const { themeForMapItem, mapItemForTheme } = await import('../src/ui/garage');
+    expect(themeForMapItem('map-standard', 'day')).toBe('day');
+    expect(themeForMapItem('map-standard', 'neon')).toBe('night');
+    expect(themeForMapItem('map-neon', 'day')).toBe('neon');
+    for (const t of ['night', 'day', 'neon', 'blueprint', 'vintage'] as const)
+      expect(themeForMapItem(mapItemForTheme(t), t)).toBe(t);
+  });
+});

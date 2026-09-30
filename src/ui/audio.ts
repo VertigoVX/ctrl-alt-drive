@@ -42,5 +42,25 @@ export class Sfx {
   powerup() { this.play([[523, 0, 0.1], [659, 0.06, 0.1], [784, 0.12, 0.1], [1047, 0.18, 0.25]], 'triangle', 0.07); }
   recycled() { this.play([[220, 0, 0.15], [165, 0.08, 0.25]], 'sawtooth', 0.05); }
   caught() { this.play([[392, 0, 0.18], [311, 0.15, 0.18], [233, 0.3, 0.4]], 'sawtooth', 0.06); }
+  /** Cosmetic horns from the garage. Each is a short synthesized phrase. */
+  horn(kind: string) {
+    switch (kind) {
+      case 'horn-twotone':
+        this.play([[587, 0, 0.26], [440, 0.26, 0.3]], 'square', 0.05);
+        break;
+      case 'horn-bell':
+        this.play([[2093, 0, 0.35], [2637, 0, 0.3], [2093, 0.16, 0.45], [2637, 0.16, 0.4]], 'sine', 0.05);
+        break;
+      case 'horn-chiptune':
+        this.play([[659, 0, 0.08], [784, 0.08, 0.08], [988, 0.16, 0.08], [1319, 0.24, 0.18]], 'square', 0.045);
+        break;
+      case 'horn-air':
+        this.play([[233, 0, 0.75], [277, 0, 0.75], [349, 0, 0.75]], 'sawtooth', 0.045);
+        break;
+      default:
+        this.play([[415, 0, 0.3], [523, 0, 0.3]], 'square', 0.045);
+    }
+  }
+
   expired() { this.play([[330, 0, 0.2], [262, 0.15, 0.3]], 'triangle', 0.06); }
 }

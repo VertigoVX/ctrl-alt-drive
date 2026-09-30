@@ -1,13 +1,16 @@
 import { updateAutonomous, DEFAULT_AV_TUNING } from './core/autonomous';
-import { createCamera, updateCamera } from './core/camera';
+import { createCamera, updateCamera, type Insets } from './core/camera';
 import { describeDirections, formatClock } from './core/format';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
 import { inputFromKeys, inputFromStick } from './core/input';
 import { createRng } from './core/rng';
+import { parseSettings, type Settings, type ThemeId } from './core/settings';
+import { addEarnings, availableThemes, CATALOG, equip, parseProfile, type Profile } from './core/shop';
 import type { DriveInput } from './core/vehicle';
 import { Renderer } from './render/renderer';
-import { THEMES, type ThemeName } from './render/theme';
+import { THEMES } from './render/theme';
 import { Sfx } from './ui/audio';
+import { Garage, mapItemForTheme } from './ui/garage';
 import './styles.css';
 
 // ---------- tiny helpers ----------
@@ -22,7 +25,9 @@ const store = {
   },
 };
 const fmt = (n: number) => n.toLocaleString('en-US');
+const money = (n: number) => `$${fmt(n)}`;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const landscapePhone = window.matchMedia('(max-height: 500px) and (orientation: landscape)');
 
 const ICONS = {
   left: '<svg viewBox="0 0 44 44"><path d="M30 38V22a6 6 0 0 0-6-6H10"/><path d="M17 8l-8 8 8 8"/></svg>',
@@ -32,13 +37,28 @@ const ICONS = {
   flag: '<svg viewBox="0 0 16 16"><path d="M3 1h1.6v14H3z"/><path d="M4.6 1.5 13 5l-8.4 3.6z"/></svg>',
 };
 
-// ---------- state ----------
+// ---------- persistent state ----------
 
-type Mode = 'title' | 'playing' | 'paused' | 'over';
+function loadSettings(): Settings {
+  const raw = store.get('cad.settings');
+  if (raw) return parseSettings(raw);
+  // Migrate the separate keys used by the first release.
+  return parseSettings(JSON.stringify({ theme: store.get('cad.theme') ?? undefined, muted: store.get('cad.muted') === '1' }));
+}
+let settings = loadSettings();
+let profile: Profile = parseProfile(store.get('cad.profile'));
+const saveSettings = () => store.set('cad.settings', JSON.stringify(settings));
+const saveProfile = () => store.set('cad.profile', JSON.stringify(profile));
+// A theme from a style you no longer own (or a hand-edited save) falls back to the night map.
+if (!availableThemes(profile).includes(settings.theme)) settings.theme = 'night';
+
+// ---------- game state ----------
+
+type Mode = 'title' | 'playing' | 'paused' | 'over' | 'garage' | 'settings';
 let mode: Mode = 'title';
-let theme: ThemeName = (store.get('cad.theme') as ThemeName) || 'night';
+let returnMode: Mode = 'title';
 const sfx = new Sfx();
-sfx.muted = store.get('cad.muted') === '1';
+sfx.muted = settings.muted;
 let best = Number(store.get('cad.best') || 0);
 
 const urlSeed = Number(new URLSearchParams(location.search).get('seed'));
@@ -49,33 +69,49 @@ const renderer = new Renderer(canvas);
 const cam = createCamera(game.taxi.pos);
 const attractRng = createRng(1);
 let attractT = 0;
+let shiftStartCash = profile.cash;
 
 // ---------- theme & sound ----------
 
 function applyTheme() {
-  document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEMES[theme].land);
-  const btn = $('themeButton');
-  btn.setAttribute('aria-label', theme === 'night' ? 'Switch to day map' : 'Switch to night map');
-  btn.innerHTML =
-    theme === 'night'
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
+  const t = THEMES[settings.theme];
+  document.documentElement.dataset.theme = t.ui === 'light' ? 'day' : 'night';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t.land);
+  $('themeButton').setAttribute('aria-label', `Map style: ${t.label2}. Change map style`);
 }
-function toggleTheme() {
-  theme = theme === 'night' ? 'day' : 'night';
-  store.set('cad.theme', theme);
+function setTheme(theme: ThemeId) {
+  settings.theme = theme;
+  saveSettings();
   applyTheme();
+}
+function cycleTheme() {
+  const themes = availableThemes(profile);
+  const next = themes[(themes.indexOf(settings.theme) + 1) % themes.length];
+  setTheme(next);
+  profile = equip(profile, mapItemForTheme(next));
+  saveProfile();
+  if (mode === 'playing') toast(`Map style: ${THEMES[next].label2}`, THEMES[next].route);
 }
 function applySound() {
   const btn = $('soundButton');
   btn.setAttribute('aria-pressed', String(sfx.muted));
   btn.setAttribute('aria-label', sfx.muted ? 'Unmute sound' : 'Mute sound');
+  $('soundSwitch').setAttribute('aria-checked', String(!sfx.muted));
 }
-function toggleSound() {
-  sfx.muted = !sfx.muted;
-  store.set('cad.muted', sfx.muted ? '1' : '0');
+function setMuted(muted: boolean) {
+  sfx.muted = muted;
+  settings.muted = muted;
+  saveSettings();
   applySound();
+}
+
+let lastHorn = 0;
+function honk() {
+  const now = performance.now();
+  if (now - lastHorn < 400) return;
+  lastHorn = now;
+  sfx.unlock();
+  sfx.horn(profile.equipped.horn);
 }
 
 // ---------- screens ----------
@@ -84,29 +120,58 @@ function show(id: string, visible: boolean) {
   $(id).hidden = !visible;
 }
 
+const garage = new Garage({
+  getProfile: () => profile,
+  setProfile: (p) => {
+    profile = p;
+    saveProfile();
+  },
+  getTheme: () => settings.theme,
+  setTheme,
+  playHorn: (id) => {
+    sfx.unlock();
+    sfx.horn(id);
+  },
+  onClose: () => setMode(returnMode),
+  reducedMotion,
+});
+
 function setMode(next: Mode) {
+  if (mode === 'garage' && next !== 'garage') garage.close();
   mode = next;
   show('titleScreen', mode === 'title');
   show('pauseScreen', mode === 'paused');
   show('overScreen', mode === 'over');
-  show('hud', mode === 'playing' || mode === 'paused');
+  show('garageScreen', mode === 'garage');
+  show('settingsScreen', mode === 'settings');
+  show('hud', mode === 'playing' || mode === 'paused' || (mode === 'settings' && returnMode === 'paused'));
   if (mode === 'paused') $('resumeButton').focus();
   if (mode === 'over') $('againButton').focus();
-  if (mode === 'title') updateBestLine();
+  if (mode === 'title') updateTitle();
+  if (mode === 'garage') garage.open();
+  if (mode === 'settings') syncSettingsPanel();
 }
 
-function updateBestLine() {
+function openOverlay(target: 'garage' | 'settings') {
+  returnMode = mode;
+  setMode(target);
+}
+
+function updateTitle() {
   const line = $('bestLine');
   line.hidden = best <= 0;
-  line.textContent = `Best shift: ${fmt(best)}`;
+  line.textContent = `Best shift: ${money(best)}`;
+  $('titleWallet').textContent = money(profile.cash);
 }
 
 function startShift(seed = freshSeed()) {
   sfx.unlock();
   game = createGame({ seed });
+  game.steeringSensitivity = settings.sensitivity;
   cam.x = game.taxi.pos.x;
   cam.y = game.taxi.pos.y;
   lastCount = -1;
+  shiftStartCash = profile.cash;
   $('toasts').innerHTML = '';
   keys.clear();
   setMode('playing');
@@ -117,21 +182,51 @@ function endShift() {
     best = game.score;
     store.set('cad.best', String(best));
   }
-  $('overScore').textContent = fmt(game.score);
+  $('overScore').textContent = money(game.score);
   $('overFares').textContent = String(game.fares);
   $('overEscapes').textContent = String(game.escapes);
   $('overRecycled').textContent = String(game.recycled);
+  $('overWallet').textContent = money(profile.cash);
   $('overLine').textContent =
     game.lives > 0
       ? 'You clocked off early.'
       : game.fares === 0
         ? 'The fleet got you before your first fare.'
         : `You got ${game.fares} ${game.fares === 1 ? 'fare' : 'fares'} home before the fleet caught up.`;
-  $('overBest').textContent = game.score >= best && game.score > 0 ? 'New best shift.' : `Best shift: ${fmt(best)}`;
+  $('overBest').textContent = game.score >= best && game.score > 0 ? 'New best shift.' : `Best shift: ${money(best)}`;
+  // Nudge towards the garage when this shift put something new within reach.
+  const newlyAffordable = CATALOG.filter(
+    (i) => !profile.owned.includes(i.id) && i.price <= profile.cash && i.price > shiftStartCash,
+  );
+  const nudge = $('overNudge');
+  nudge.hidden = newlyAffordable.length === 0;
+  nudge.textContent =
+    newlyAffordable.length === 1
+      ? `You can now afford ${newlyAffordable[0].name} in the garage.`
+      : `${newlyAffordable.length} new things in the garage are within reach.`;
   $('overSeed').textContent = `City ${game.seed}. Add ?seed=${game.seed} to the address to drive it again.`;
   show('countdown', false);
   setMode('over');
 }
+
+// ---------- settings panel ----------
+
+const sensitivityWord = (v: number) => (v < 0.8 ? 'Gentle' : v > 1.2 ? 'Sharp' : 'Standard');
+function syncSettingsPanel() {
+  const pct = Math.round(settings.sensitivity * 100);
+  ($('sensitivity') as HTMLInputElement).value = String(pct);
+  $('sensitivityValue').textContent = `${pct}%`;
+  $('sensitivityWord').textContent = sensitivityWord(settings.sensitivity);
+  applySound();
+}
+$('sensitivity').addEventListener('input', (e) => {
+  settings.sensitivity = Number((e.target as HTMLInputElement).value) / 100;
+  game.steeringSensitivity = settings.sensitivity;
+  saveSettings();
+  syncSettingsPanel();
+});
+$('soundSwitch').addEventListener('click', () => setMuted(!sfx.muted));
+$('settingsDone').addEventListener('click', () => setMode(returnMode));
 
 // ---------- toasts ----------
 
@@ -150,8 +245,13 @@ function toast(text: string, color: string) {
 
 // ---------- events → feedback ----------
 
+function bank(amount: number) {
+  profile = addEarnings(profile, amount);
+  saveProfile();
+}
+
 function handle(events: GameEvent[]) {
-  const t = THEMES[theme];
+  const t = THEMES[settings.theme];
   for (const e of events) {
     switch (e.type) {
       case 'go':
@@ -165,9 +265,10 @@ function handle(events: GameEvent[]) {
         break;
       case 'dropoff':
         sfx.dropoff();
+        bank(e.fare);
         renderer.ring(game.taxi.pos, t.dropoff);
-        renderer.floatText(`+${e.fare}`, game.taxi.pos, '#FFD60A');
-        toast(e.bonus > 0 ? `Fare paid: ${e.fare}, with ${e.bonus} on-time bonus` : `Fare paid: ${e.fare}`, '#FFD60A');
+        renderer.floatText(`+${money(e.fare)}`, game.taxi.pos, '#FFD60A');
+        toast(e.bonus > 0 ? `Fare paid: ${money(e.fare)}, with ${money(e.bonus)} on-time bonus` : `Fare paid: ${money(e.fare)}`, '#FFD60A');
         break;
       case 'fareExpired':
         sfx.expired();
@@ -194,8 +295,9 @@ function handle(events: GameEvent[]) {
         break;
       case 'recycled':
         sfx.recycled();
+        bank(e.points);
         cam.shake = 0.5;
-        renderer.floatText(`+${e.points}`, game.taxi.pos, t.route);
+        renderer.floatText(`+${money(e.points)}`, game.taxi.pos, t.route);
         break;
       case 'caught':
         sfx.caught();
@@ -237,7 +339,6 @@ function setHtml(id: string, html: string) {
 
 function updateHud() {
   const g = game;
-  // Countdown keycap.
   if (g.phase === 'ready') {
     const n = Math.max(1, Math.ceil(GAME_RULES.countdown - g.phaseTime));
     show('countdown', true);
@@ -252,7 +353,6 @@ function updateHud() {
     }
   } else show('countdown', false);
 
-  // Direction banner.
   const job = g.job;
   if (g.route.length >= 2) {
     const d = describeDirections(g.map, g.route);
@@ -268,12 +368,10 @@ function updateHud() {
     setText('bannerInstruction', job.stage === 'pickup' ? `Pick up ${job.passenger}` : `Drop off ${job.passenger}`);
   }
 
-  // Fare card.
   const pickup = job.stage === 'pickup';
   setText('fareTitle', pickup ? `Pick up ${job.passenger}` : `Taking ${job.passenger}`);
   setText('fareWhere', pickup ? `Waiting at ${job.pickupLabel}` : `To ${job.dropoffLabel}`);
-  const dot = $('fareDot');
-  dot.classList.toggle('dropoff', !pickup);
+  $('fareDot').classList.toggle('dropoff', !pickup);
   setHtml('fareDot', pickup ? ICONS.person : ICONS.flag);
   setText('meterTime', formatClock(job.timeLeft));
   const ratio = job.timeLeft / job.timeTotal;
@@ -284,7 +382,7 @@ function updateHud() {
   fill.style.transform = `scaleX(${Math.max(0, ratio)})`;
   fill.style.background = ratio < 0.18 ? 'var(--red)' : ratio < 0.4 ? 'var(--yellow)' : 'var(--green)';
 
-  setText('score', fmt(g.score));
+  setText('score', money(g.score));
   setText('fares', String(g.fares));
   setText('level', String(g.level));
   setHtml(
@@ -292,7 +390,6 @@ function updateHud() {
     Array.from({ length: GAME_RULES.lives }, (_, i) => `<span class="life${i < g.lives ? '' : ' lost'}"></span>`).join(''),
   );
 
-  // Status chips.
   const chips: string[] = [];
   const chasing = g.avs.filter((a) => a.state === 'chase' || a.state === 'alert').length;
   if (chasing) chips.push(`<span class="chip chip-chase">${chasing} ${chasing === 1 ? 'car' : 'cars'} chasing you</span>`);
@@ -305,6 +402,22 @@ function updateHud() {
   setHtml('chips', chips.join(''));
 }
 
+/** Where the HUD panels sit, so the camera can frame the taxi in the visible gap. */
+let insets: Required<Insets> = { top: 0, bottom: 0, left: 0 };
+let insetTimer = 0;
+function measureInsets() {
+  if (mode !== 'playing') {
+    insets = { top: 0, bottom: 0, left: 0 };
+    return;
+  }
+  const h = renderer.height || window.innerHeight;
+  const sheet = document.querySelector('.sheet')!.getBoundingClientRect();
+  const banner = $('banner').getBoundingClientRect();
+  insets = landscapePhone.matches
+    ? { top: 0, bottom: 0, left: Math.max(sheet.right, banner.right) + 8 }
+    : { top: banner.bottom + 8, bottom: Math.max(0, h - sheet.top) + 8, left: 0 };
+}
+
 // ---------- input ----------
 
 const keys = new Set<string>();
@@ -313,17 +426,19 @@ let stick: { id: number; ox: number; oy: number; x: number; y: number } | null =
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  if (e.code === 'KeyP' || e.code === 'Escape') {
-    if (mode === 'playing') setMode('paused');
-    else if (mode === 'paused') setMode('playing');
-    return;
-  }
   if (mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
     return startShift(urlSeed || freshSeed());
   }
-  if (e.code === 'KeyT') return toggleTheme();
-  if (e.code === 'KeyM') return toggleSound();
+  if (e.code === 'KeyP' || e.code === 'Escape') {
+    if (mode === 'playing') setMode('paused');
+    else if (mode === 'paused') setMode('playing');
+    else if (mode === 'garage' || mode === 'settings') setMode(returnMode);
+    return;
+  }
+  if (e.code === 'KeyT') return cycleTheme();
+  if (e.code === 'KeyM') return setMuted(!sfx.muted);
+  if (e.code === 'KeyH' && mode === 'playing') return honk();
   keys.add(e.code);
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -334,7 +449,7 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('pointerdown', (e) => {
   if (mode !== 'playing' || e.pointerType === 'mouse') return;
-  if ((e.target as HTMLElement).closest('button, .sheet')) return;
+  if ((e.target as HTMLElement).closest('button, .sheet, .banner')) return;
   stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 };
   const el = $('stick');
   el.style.left = `${e.clientX}px`;
@@ -374,8 +489,13 @@ $('quitButton').addEventListener('click', endShift);
 $('againButton').addEventListener('click', () => startShift());
 $('replayButton').addEventListener('click', () => startShift(game.seed));
 $('pauseButton').addEventListener('click', () => setMode('paused'));
-$('themeButton').addEventListener('click', toggleTheme);
-$('soundButton').addEventListener('click', toggleSound);
+$('themeButton').addEventListener('click', cycleTheme);
+$('soundButton').addEventListener('click', () => setMuted(!sfx.muted));
+$('hornButton').addEventListener('click', honk);
+$('garageButton').addEventListener('click', () => openOverlay('garage'));
+$('overGarageButton').addEventListener('click', () => openOverlay('garage'));
+$('settingsButton').addEventListener('click', () => openOverlay('settings'));
+$('pauseSettingsButton').addEventListener('click', () => openOverlay('settings'));
 
 // ---------- loop ----------
 
@@ -387,7 +507,14 @@ let input: DriveInput = { throttle: 0, steer: 0 };
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  renderer.syncSize();
   const view = { w: renderer.width, h: renderer.height };
+
+  insetTimer -= dt;
+  if (insetTimer <= 0) {
+    measureInsets();
+    insetTimer = 0.25;
+  }
 
   if (mode === 'playing') {
     acc += dt;
@@ -396,9 +523,9 @@ function frame(now: number) {
       handle(updateGame(game, input, STEP));
       acc -= STEP;
     }
-    updateCamera(cam, game.taxi, view, game.map, dt);
+    updateCamera(cam, game.taxi, view, game.map, dt, insets);
     updateHud();
-  } else if (mode === 'title') {
+  } else if (mode === 'title' || (mode === 'garage' && returnMode === 'title') || (mode === 'settings' && returnMode === 'title')) {
     // Attract mode: the fleet roams while the camera drifts across town.
     attractT += dt;
     for (const av of game.avs)
@@ -409,12 +536,15 @@ function frame(now: number) {
     updateCamera(cam, { pos, heading: 0, speed: 0 }, view, game.map, dt);
   }
 
-  if (mode !== 'paused') {
+  const attract = mode === 'title' || ((mode === 'garage' || mode === 'settings') && returnMode === 'title');
+  if (mode !== 'paused' && !(mode === 'settings' && returnMode === 'paused')) {
     renderer.render(game, cam, {
-      theme,
+      theme: settings.theme,
       reducedMotion,
       braking: input.throttle < 0 && game.taxi.speed > 0,
-      attract: mode === 'title',
+      attract,
+      look: { paint: profile.equipped.paint, roof: profile.equipped.roof },
+      insets,
     }, dt);
   }
   requestAnimationFrame(frame);
@@ -422,19 +552,18 @@ function frame(now: number) {
 
 // ---------- boot ----------
 
-function resize() {
-  renderer.resize();
-}
-window.addEventListener('resize', resize);
-resize();
 applyTheme();
 applySound();
-// Give the attract-mode city a few more cars to look alive.
 for (let i = 0; i < 5; i++) spawnAv(game);
 setMode('title');
 requestAnimationFrame(frame);
 
 // `?debug` exposes the live game for poking at in the console (and for screenshot scripts).
 if (new URLSearchParams(location.search).has('debug')) {
-  (window as unknown as { cad: unknown }).cad = { get game() { return game; }, cam };
+  (window as unknown as { cad: unknown }).cad = {
+    get game() { return game; },
+    get profile() { return profile; },
+    cam,
+    give(n: number) { bank(n); updateTitle(); },
+  };
 }

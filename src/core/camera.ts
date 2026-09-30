@@ -20,6 +20,7 @@ export const createCamera = (at: Vec): Camera => ({ x: at.x, y: at.y, zoom: 0.9,
 export interface Insets {
   top: number;
   bottom: number;
+  left?: number;
 }
 
 export function updateCamera(
@@ -40,7 +41,7 @@ export function updateCamera(
   cam.zoom = lerp(cam.zoom, base * (1 - speedRatio * 0.15), Math.min(1, 1.5 * dt));
 
   const lookAhead = target.speed * 0.45;
-  const wantX = target.pos.x + Math.cos(target.heading) * lookAhead;
+  const wantX = target.pos.x + Math.cos(target.heading) * lookAhead - (insets.left ?? 0) / 2 / cam.zoom;
   // Offset so the taxi sits centred in the unobstructed part of the screen.
   const wantY = target.pos.y + Math.sin(target.heading) * lookAhead - (insets.top - insets.bottom) / 2 / cam.zoom;
   cam.x = lerp(cam.x, wantX, k);

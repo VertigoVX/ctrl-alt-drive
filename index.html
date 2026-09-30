@@ -27,8 +27,11 @@
       </div>
 
       <div class="map-controls material">
-        <button class="map-button" id="themeButton" aria-label="Switch to day map" title="Day / night map (T)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" /></svg>
+        <button class="map-button" id="themeButton" aria-label="Change map style" title="Map style (T)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z" /><path d="M9 4v13M15 6.5v13" /></svg>
+        </button>
+        <button class="map-button" id="hornButton" aria-label="Sound the horn" title="Horn (H)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h3l7 4V6L6 10z" /><path d="M16.5 8.5 19 7M16.5 15.5 19 17M17 12h3" /></svg>
         </button>
         <button class="map-button" id="soundButton" aria-label="Mute sound" title="Sound (M)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" /></svg>
@@ -57,7 +60,7 @@
         </div>
         <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
         <div class="stats">
-          <div class="stat"><span class="stat-value" id="score">0</span><span class="stat-label">Score</span></div>
+          <div class="stat"><span class="stat-value" id="score">$0</span><span class="stat-label">Earned</span></div>
           <div class="stat"><span class="stat-value" id="fares">0</span><span class="stat-label">Fares</span></div>
           <div class="stat"><span class="stat-value" id="level">1</span><span class="stat-label">Level</span></div>
           <div class="stat stat-lives" aria-label="Lives"><span class="lives" id="lives"></span><span class="stat-label">Cabs left</span></div>
@@ -79,6 +82,10 @@
           <li><kbd class="key key-mini">Del</kbd>Drive over a Del key to reboot the whole fleet, then ram them off the road.</li>
         </ul>
         <button class="primary" id="startButton">Start shift</button>
+        <div class="button-row">
+          <button class="secondary" id="garageButton">Garage <span class="wallet-inline" id="titleWallet">$0</span></button>
+          <button class="secondary" id="settingsButton">Settings</button>
+        </div>
         <div class="controls-hint hint-desktop">
           <span class="hint-keys"><kbd class="key key-mini">W</kbd><kbd class="key key-mini">A</kbd><kbd class="key key-mini">S</kbd><kbd class="key key-mini">D</kbd></span>
           <span>or arrow keys to drive, <kbd class="key key-mini">P</kbd> to pause.</span>
@@ -94,6 +101,7 @@
         <h2>Paused</h2>
         <p class="lede">The fleet waits for no one — except you, right now.</p>
         <button class="primary" id="resumeButton">Resume</button>
+        <button class="secondary" id="pauseSettingsButton">Settings</button>
         <button class="secondary" id="quitButton">End shift</button>
       </div>
     </section>
@@ -104,15 +112,70 @@
         <h2>Shift over</h2>
         <p class="lede" id="overLine">A robotaxi took your last fare.</p>
         <dl class="summary">
-          <div><dt>Score</dt><dd id="overScore">0</dd></div>
+          <div><dt>Earned this shift</dt><dd id="overScore">$0</dd></div>
           <div><dt>Fares</dt><dd id="overFares">0</dd></div>
           <div><dt>Escapes</dt><dd id="overEscapes">0</dd></div>
           <div><dt>Cars rebooted off the road</dt><dd id="overRecycled">0</dd></div>
         </dl>
+        <div class="wallet-row"><span>Wallet</span><strong id="overWallet">$0</strong></div>
         <p class="best" id="overBest"></p>
+        <p class="nudge" id="overNudge" hidden></p>
         <button class="primary" id="againButton">Drive a new city</button>
-        <button class="secondary" id="replayButton">Replay this city</button>
+        <div class="button-row">
+          <button class="secondary" id="replayButton">Replay this city</button>
+          <button class="secondary" id="overGarageButton">Garage</button>
+        </div>
         <p class="seed" id="overSeed"></p>
+      </div>
+    </section>
+
+ <!-- Garage -->
+    <section id="garageScreen" class="screen screen-center" hidden>
+      <div class="card card-garage material" role="dialog" aria-labelledby="garageTitle">
+        <header class="garage-head">
+          <h2 id="garageTitle">Garage</h2>
+          <div class="wallet" aria-label="Wallet"><span class="wallet-label">Wallet</span><span id="garageWallet">$0</span></div>
+        </header>
+        <div class="stage">
+          <canvas id="garageStage" aria-hidden="true"></canvas>
+          <button class="stage-horn" id="stageHorn" hidden>Play horn</button>
+        </div>
+        <div class="garage-detail">
+          <div class="detail-copy">
+            <div class="detail-name" id="detailName"></div>
+            <div class="detail-blurb" id="detailBlurb"></div>
+          </div>
+          <button class="primary buy" id="buyButton"></button>
+        </div>
+        <div class="segmented" role="tablist" aria-label="Categories">
+          <button role="tab" data-cat="paint">Paint</button>
+          <button role="tab" data-cat="roof">Roof</button>
+          <button role="tab" data-cat="horn">Horn</button>
+          <button role="tab" data-cat="map">Map</button>
+        </div>
+        <div class="items" id="garageItems" role="listbox" aria-label="Items"></div>
+        <p class="garage-note">Everything here is cosmetic. The fleet doesn't care how good you look.</p>
+        <button class="secondary" id="garageDone">Done</button>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="settingsScreen" class="screen screen-center" hidden>
+      <div class="card card-small material" role="dialog" aria-labelledby="settingsTitle">
+        <h2 id="settingsTitle">Settings</h2>
+        <div class="setting">
+          <div class="setting-row">
+            <label for="sensitivity">Steering sensitivity</label>
+            <output id="sensitivityValue" for="sensitivity">100%</output>
+          </div>
+          <input type="range" id="sensitivity" min="50" max="150" step="5" value="100" />
+          <div class="range-ends"><span>Gentle</span><span id="sensitivityWord">Standard</span><span>Sharp</span></div>
+        </div>
+        <div class="setting setting-row">
+          <span id="soundLabel">Sound effects</span>
+          <button class="switch" id="soundSwitch" role="switch" aria-checked="true" aria-labelledby="soundLabel"><span></span></button>
+        </div>
+        <button class="primary" id="settingsDone">Done</button>
       </div>
     </section>
 
