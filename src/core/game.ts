@@ -6,7 +6,7 @@ import {
 import { dist, type Vec } from './math';
 import { distanceField, findPath } from './pathfinding';
 import { createRng, type Rng } from './rng';
-import { createVehicle, updateVehicle, type DriveInput, type Vehicle } from './vehicle';
+import { createVehicle, DEFAULT_HANDLING, updateVehicle, type DriveInput, type Vehicle } from './vehicle';
 
 export const GAME_RULES = {
   countdown: 3,
@@ -89,6 +89,8 @@ export interface GameState {
   recycled: number;
   invulnerable: number;
   boostTime: number;
+  /** Player steering preference, multiplies the handling turn rate. */
+  steeringSensitivity: number;
   spawnTimer: number;
   powerupTimer: number;
   routeTimer: number;
@@ -187,7 +189,7 @@ export function createGame(opts: GameOptions): GameState {
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,
     score: 0, lives: GAME_RULES.lives, fares: 0, level: 1, escapes: 0, recycled: 0,
-    invulnerable: 0, boostTime: 0,
+    invulnerable: 0, boostTime: 0, steeringSensitivity: 1,
     spawnTimer: GAME_RULES.spawnInterval(1), powerupTimer: GAME_RULES.powerupInterval, routeTimer: 0,
     nextAvId: 1,
   };
@@ -227,7 +229,8 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   g.boostTime = Math.max(0, g.boostTime - dt);
 
   // Taxi.
-  updateVehicle(g.taxi, input, dt, g.map, g.boostTime > 0 ? GAME_RULES.surgeBoost : 1);
+  const handling = { ...DEFAULT_HANDLING, turnRate: DEFAULT_HANDLING.turnRate * g.steeringSensitivity };
+  updateVehicle(g.taxi, input, dt, g.map, g.boostTime > 0 ? GAME_RULES.surgeBoost : 1, handling);
 
   // Fleet.
   const tuning = DEFAULT_AV_TUNING;

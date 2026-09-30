@@ -20,7 +20,8 @@ export const DEFAULT_HANDLING: Handling = {
   accel: 430,
   brake: 800,
   coast: 260,
-  turnRate: 3.4,
+  // 40% gentler than the launch tuning (3.4): players found small taps over-steered.
+  turnRate: 3.4 * 0.6,
   turnSpeedRef: 90,
   laneAssist: 8,
 };

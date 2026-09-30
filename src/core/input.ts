@@ -6,6 +6,9 @@ const DOWN = ['ArrowDown', 'KeyS'];
 const LEFT = ['ArrowLeft', 'KeyA'];
 const RIGHT = ['ArrowRight', 'KeyD'];
 
+/** How hard the touch stick steers per radian of error (was 2, lowered 40%). */
+export const STICK_GAIN = 2 * 0.6;
+
 const any = (keys: Set<string>, list: string[]) => list.some((k) => keys.has(k));
 
 export function inputFromKeys(keys: Set<string>): DriveInput {
@@ -22,5 +25,5 @@ export function inputFromStick(stick: Vec, heading: number): DriveInput {
   const mag = Math.min(1, Math.hypot(stick.x, stick.y));
   if (mag < 0.2) return { throttle: 0, steer: 0 };
   const diff = angleDiff(heading, Math.atan2(stick.y, stick.x));
-  return { throttle: mag, steer: clamp(diff * 2, -1, 1) || 0 };
+  return { throttle: mag, steer: clamp(diff * STICK_GAIN, -1, 1) || 0 };
 }
