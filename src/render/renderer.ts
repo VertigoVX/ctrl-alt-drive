@@ -4,7 +4,8 @@ import { isDrivable, Tile, tileAt, tileCenter, type CityMap } from '../core/city
 import type { GameState, Powerup } from '../core/game';
 import type { Vec } from '../core/math';
 import { visibilityFan } from '../core/vision';
-import { drawTaxiSprite, type TaxiLook } from './taxiSprite';
+import { Ambient, drawLandmarks, drawParkTrees, drawStreetLamps, drawTrafficLights, drawWindows } from './cityLife';
+import { drawJdmCar, drawTaxiSprite, type TaxiLook } from './taxiSprite';
 import { THEMES, type MapTheme, type ThemeName } from './theme';
 
 interface Label {
@@ -42,6 +43,10 @@ export interface RenderOptions {
   look: TaxiLook;
   /** Screen space covered by HUD panels; edge indicators stay clear of it. */
   insets: { top: number; bottom: number; left: number };
+  /** Robotaxi style for this city. */
+  robo: 'pod' | 'jdm';
+  /** Display names for the city's landmarks, by id. */
+  landmarkNames: Record<string, string>;
 }
 
 /** Upper bound on backing-store pixels; keeps big tablets and 4K screens smooth. */
@@ -56,6 +61,7 @@ export class Renderer {
   private floaters: Floater[] = [];
   private rings: Ring[] = [];
   private time = 0;
+  private ambient = new Ambient();
   private dpr = 1;
   width = 0;
   height = 0;
@@ -163,14 +169,24 @@ export class Renderer {
       y1: Math.min(g.map.height - 1, Math.ceil((cam.y + h / 2 / cam.zoom) / ts) + 1),
     };
 
+    this.ambient.update(g.map, reducedMotionDt(opts, dt));
     this.drawGround(g.map, theme, view);
-    this.drawBuildings(g.map, theme, view);
+    this.ambient.drawBoats(ctx, g.map, this.time);
+    drawParkTrees(ctx, g.map, view, theme);
+    drawLandmarks(ctx, g.map, theme, this.time, true);
+    const visible = this.drawBuildings(g.map, theme, view);
+    drawWindows(ctx, visible, theme, this.time);
+    drawLandmarks(ctx, g.map, theme, this.time, false);
+    this.ambient.drawWalkers(ctx, view, ts, theme);
+    drawTrafficLights(ctx, g.map, view, this.time);
+    drawStreetLamps(ctx, g.map, view, theme);
     this.drawLabels(theme, cam, view, ts);
+    this.drawLandmarkNames(g.map, theme, cam, opts.landmarkNames);
     if (!opts.attract) this.drawRoute(g, theme);
     if (!opts.attract) this.drawPins(g, theme);
     for (const p of g.powerups) this.drawPowerup(p);
     for (const av of g.avs) this.drawVision(g.map, av, theme);
-    for (const av of g.avs) this.drawAv(av, theme);
+    for (const av of g.avs) this.drawAv(av, theme, opts.robo);
     if (!opts.attract) this.drawTaxi(g, theme, opts);
     this.drawEffects(dt);
     ctx.restore();
@@ -263,7 +279,7 @@ export class Renderer {
     ctx.stroke();
   }
 
-  private drawBuildings(map: CityMap, t: MapTheme, v: { x0: number; y0: number; x1: number; y1: number }) {
+  private drawBuildings(map: CityMap, t: MapTheme, v: { x0: number; y0: number; x1: number; y1: number }): CityMap['buildings'] {
     const { ctx } = this;
     const ts = map.tileSize;
     const minX = v.x0 * ts - ts * 3, maxX = (v.x1 + 1) * ts, minY = v.y0 * ts - ts * 3, maxY = (v.y1 + 1) * ts;
@@ -281,6 +297,28 @@ export class Renderer {
       ctx.strokeStyle = t.roofEdge;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
+    return visible;
+  }
+
+  private drawLandmarkNames(map: CityMap, t: MapTheme, cam: Camera, names: Record<string, string>) {
+    if (cam.zoom < 0.4) return;
+    const { ctx } = this;
+    const px = 11 / cam.zoom;
+    ctx.font = `600 ${px.toFixed(2)}px -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const l of map.landmarks) {
+      const name = names[l.id];
+      if (!name) continue;
+      const x = (l.x + l.w / 2) * map.tileSize;
+      const y = (l.y + l.h) * map.tileSize - (l.overlay ? -14 / cam.zoom : 12 / cam.zoom);
+      const w = ctx.measureText(name).width + 12 / cam.zoom;
+      ctx.fillStyle = t.labelHalo;
+      this.roundRect(x - w / 2, y - 9 / cam.zoom, w, 18 / cam.zoom, 9 / cam.zoom);
+      ctx.fill();
+      ctx.fillStyle = t.label;
+      ctx.fillText(name, x, y);
     }
   }
 
@@ -405,7 +443,7 @@ export class Renderer {
 
   private drawPins(g: GameState, t: MapTheme) {
     if (g.phase === 'over') return;
-    if (g.job.stage === 'pickup') this.drawPin(g.job.pickup, t.pickup, 'person');
+    if (g.job.stage === 'pickup') this.drawPin(g.job.pickup, g.job.kind === 'vip' ? '#E5A50A' : t.pickup, 'person');
     else this.drawPin(g.job.dropoff, t.dropoff, 'flag');
   }
 
@@ -414,8 +452,8 @@ export class Renderer {
     const bob = Math.sin(this.time * 3 + p.pos.x) * 2;
     ctx.save();
     ctx.translate(p.pos.x, p.pos.y + bob);
-    const face = p.kind === 'surge' ? '#FFD60A' : '#F4F4F6';
-    const side = p.kind === 'surge' ? '#B38F00' : '#A7A9B0';
+    const face = p.kind === 'surge' ? '#FFD60A' : p.kind === 'repair' ? '#7CE0A0' : '#F4F4F6';
+    const side = p.kind === 'surge' ? '#B38F00' : p.kind === 'repair' ? '#2E8F55' : '#A7A9B0';
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     this.roundRect(-14, -10, 28, 28, 7);
     ctx.fill();
@@ -430,7 +468,19 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (p.kind === 'reboot') ctx.fillText('Del', 0, -4);
-    else {
+    else if (p.kind === 'repair') {
+      // Wrench.
+      ctx.strokeStyle = '#0F3D22';
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-5, 1);
+      ctx.lineTo(3, -7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(4.5, -8.5, 3.6, Math.PI * 0.9, Math.PI * 2.4);
+      ctx.stroke();
+    } else {
       ctx.beginPath();
       ctx.moveTo(2, -13);
       ctx.lineTo(-5, -3);
@@ -480,7 +530,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawAv(av: Autonomous, t: MapTheme) {
+  private drawAv(av: Autonomous, t: MapTheme, robo: 'pod' | 'jdm') {
     const { ctx } = this;
     const fadeIn = Math.min(1, av.age / 0.6);
     ctx.save();
@@ -500,6 +550,12 @@ export class Renderer {
 
     ctx.rotate(av.heading);
     const rebooting = av.state === 'rebooting';
+    if (robo === 'jdm') {
+      drawJdmCar(ctx, av.id, headlightsOn(av), rebooting, this.time);
+      ctx.restore();
+      if (rebooting) this.drawRebootRing(av);
+      return;
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     this.roundRect(-16, -8, 34, 20, 9);
     ctx.fill();
@@ -532,7 +588,12 @@ export class Renderer {
     }
     ctx.restore();
 
-    if (rebooting) {
+    if (rebooting) this.drawRebootRing(av);
+  }
+
+  private drawRebootRing(av: Autonomous) {
+    const { ctx } = this;
+    {
       // A little progress ring while the car restarts.
       const p = Math.min(1, av.stateTime / DEFAULT_AV_TUNING.rebootTime);
       ctx.save();
@@ -673,4 +734,8 @@ export class Renderer {
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
+}
+
+function reducedMotionDt(opts: RenderOptions, dt: number) {
+  return opts.reducedMotion ? 0 : dt;
 }

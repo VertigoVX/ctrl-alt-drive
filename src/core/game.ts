@@ -35,7 +35,7 @@ export const GAME_RULES = {
   pickupRadius: 30,
   catchRadius: 24,
   /** Impacts slower than this (world units/s straight into a wall) do no damage. */
-  damageThreshold: 60,
+  damageThreshold: 90, // measured: 60–90 is almost all kerb scrapes while cornering sensibly
   /** Health lost by a full-speed head-on crash at damage scale 1. */
   crashDamage: 40,
   damageCooldown: 0.35,

@@ -1,16 +1,21 @@
 import { updateAutonomous, DEFAULT_AV_TUNING } from './core/autonomous';
 import { createCamera, isObscured, updateCamera, type Insets, type ScreenRect } from './core/camera';
 import { describeDirections, formatClock } from './core/format';
+import { CITIES, cityById, type CityDef } from './core/cities';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
+import { MODES, type ModeId } from './core/modes';
+import { PASSENGER_KINDS } from './core/passengers';
 import { inputFromKeys, inputFromStick } from './core/input';
 import { createRng } from './core/rng';
-import { parseSettings, type Settings, type ThemeId } from './core/settings';
+import { parseSettings, STEERING_PRESETS, type Settings, type ThemeId } from './core/settings';
 import { addEarnings, availableThemes, CATALOG, equip, parseProfile, type Profile } from './core/shop';
 import type { DriveInput } from './core/vehicle';
+import { drawMiniTaxi } from './render/garagePreview';
 import { Renderer } from './render/renderer';
 import { THEMES } from './render/theme';
 import { Sfx } from './ui/audio';
 import { Garage, mapItemForTheme } from './ui/garage';
+import { Music } from './ui/music';
 import './styles.css';
 
 // ---------- tiny helpers ----------
@@ -56,16 +61,23 @@ if (!availableThemes(profile).includes(settings.theme)) settings.theme = 'night'
 
 // ---------- game state ----------
 
-type Mode = 'title' | 'playing' | 'paused' | 'over' | 'garage' | 'settings';
+type Mode = 'title' | 'playing' | 'paused' | 'over' | 'garage' | 'settings' | 'cities';
 let mode: Mode = 'title';
 let returnMode: Mode = 'title';
 const sfx = new Sfx();
 sfx.muted = settings.muted;
 let best = Number(store.get('cad.best') || 0);
 
-const urlSeed = Number(new URLSearchParams(location.search).get('seed'));
-const freshSeed = () => Math.floor(Math.random() * 90000) + 10000;
-let game: GameState = createGame({ seed: urlSeed || freshSeed() });
+const music = new Music();
+music.enabled = settings.music;
+// ?city=tokyo links straight to a city.
+const urlCity = new URLSearchParams(location.search).get('city');
+if (urlCity && CITIES.some((c) => c.id === urlCity)) settings.city = cityById(urlCity).id;
+const freshSeed = () => Math.floor(Math.random() * 900000) + 100000;
+const currentCity = (): CityDef => cityById(settings.city);
+const newGame = () => createGame({ seed: freshSeed(), city: currentCity(), mode: settings.mode });
+let game: GameState = newGame();
+let shiftTips = 0;
 const canvas = $<HTMLCanvasElement>('map');
 const renderer = new Renderer(canvas);
 const cam = createCamera(game.taxi.pos);
@@ -135,6 +147,7 @@ const garage = new Garage({
     sfx.horn(id);
   },
   onClose: () => setMode(returnMode),
+  getCab: () => currentCity().cab,
   reducedMotion,
 });
 
@@ -146,15 +159,18 @@ function setMode(next: Mode) {
   show('overScreen', mode === 'over');
   show('garageScreen', mode === 'garage');
   show('settingsScreen', mode === 'settings');
+  show('cityScreen', mode === 'cities');
   show('hud', mode === 'playing' || mode === 'paused' || (mode === 'settings' && returnMode === 'paused'));
   if (mode === 'paused') $('resumeButton').focus();
   if (mode === 'over') $('againButton').focus();
   if (mode === 'title') updateTitle();
   if (mode === 'garage') garage.open();
   if (mode === 'settings') syncSettingsPanel();
+  if (mode === 'cities') renderCityList();
+  music.setIntensity(mode === 'playing' ? 1 : 0);
 }
 
-function openOverlay(target: 'garage' | 'settings') {
+function openOverlay(target: 'garage' | 'settings' | 'cities') {
   returnMode = mode;
   setMode(target);
 }
@@ -164,11 +180,60 @@ function updateTitle() {
   line.hidden = best <= 0;
   line.textContent = `Best shift: ${money(best)}`;
   $('titleWallet').textContent = money(profile.cash);
+  const city = currentCity();
+  $('cityValue').textContent = `${city.name}, ${city.cabName.toLowerCase()}`;
+  requestAnimationFrame(() => drawMiniTaxi($<HTMLCanvasElement>('cityCab'), { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: city.cab }));
+  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
+    b.setAttribute('aria-checked', String(b.dataset.mode === settings.mode)),
+  );
+  $('modeBlurb').textContent = MODES[settings.mode].blurb;
+  let matched = false;
+  document.querySelectorAll<HTMLButtonElement>('[data-steer]').forEach((b) => {
+    const on = Math.abs(Number(b.dataset.steer) - settings.sensitivity) < 0.001;
+    matched ||= on;
+    b.setAttribute('aria-checked', String(on));
+  });
+  $('steeringNote').textContent = matched ? 'Fine-tune in Settings' : `Custom: ${Math.round(settings.sensitivity * 100)}%`;
 }
 
-function startShift(seed = freshSeed()) {
+// ---------- city picker ----------
+
+function renderCityList() {
+  const list = $('cityList');
+  list.innerHTML = '';
+  for (const city of CITIES) {
+    const b = document.createElement('button');
+    b.className = 'city' + (city.id === settings.city ? ' selected' : '');
+    b.setAttribute('role', 'option');
+    b.setAttribute('aria-selected', String(city.id === settings.city));
+    b.innerHTML = '<canvas aria-hidden="true"></canvas><span class="city-name"></span><span class="city-cab"></span><span class="city-tag"></span>';
+    (b.querySelector('.city-name') as HTMLElement).textContent = city.name;
+    (b.querySelector('.city-cab') as HTMLElement).textContent = `${city.cabName}, ${city.country}`;
+    (b.querySelector('.city-tag') as HTMLElement).textContent = city.tagline;
+    const c = b.querySelector('canvas') as HTMLCanvasElement;
+    requestAnimationFrame(() => drawMiniTaxi(c, { paint: 'paint-classic', roof: 'roof-taxi', cab: city.cab }));
+    b.addEventListener('click', () => {
+      settings.city = city.id;
+      saveSettings();
+      resetAttract();
+      renderCityList();
+    });
+    list.appendChild(b);
+  }
+}
+
+function resetAttract() {
+  game = newGame();
+  for (let i = 0; i < 5; i++) spawnAv(game);
+  cam.x = game.taxi.pos.x;
+  cam.y = game.taxi.pos.y;
+}
+
+function startShift() {
   sfx.unlock();
-  game = createGame({ seed });
+  music.unlock();
+  game = newGame();
+  shiftTips = 0;
   game.steeringSensitivity = settings.sensitivity;
   cam.x = game.taxi.pos.x;
   cam.y = game.taxi.pos.y;
@@ -180,6 +245,7 @@ function startShift(seed = freshSeed()) {
 }
 
 function endShift() {
+  $('overTips').textContent = money(shiftTips);
   if (game.score > best) {
     best = game.score;
     store.set('cad.best', String(best));
@@ -206,7 +272,8 @@ function endShift() {
     newlyAffordable.length === 1
       ? `You can now afford ${newlyAffordable[0].name} in the garage.`
       : `${newlyAffordable.length} new things in the garage are within reach.`;
-  $('overSeed').textContent = `City ${game.seed}. Add ?seed=${game.seed} to the address to drive it again.`;
+  const city = currentCity();
+  $('overSeed').textContent = `${MODES[game.mode].name} mode in ${city.name}. Share it: add ?city=${city.id} to the address.`;
   show('countdown', false);
   setMode('over');
 }
@@ -219,6 +286,7 @@ function syncSettingsPanel() {
   ($('sensitivity') as HTMLInputElement).value = String(pct);
   $('sensitivityValue').textContent = `${pct}%`;
   $('sensitivityWord').textContent = sensitivityWord(settings.sensitivity);
+  $('musicSwitch').setAttribute('aria-checked', String(settings.music));
   applySound();
 }
 $('sensitivity').addEventListener('input', (e) => {
@@ -228,6 +296,13 @@ $('sensitivity').addEventListener('input', (e) => {
   syncSettingsPanel();
 });
 $('soundSwitch').addEventListener('click', () => setMuted(!sfx.muted));
+$('musicSwitch').addEventListener('click', () => {
+  settings.music = !settings.music;
+  saveSettings();
+  music.unlock();
+  music.setEnabled(settings.music);
+  syncSettingsPanel();
+});
 $('settingsDone').addEventListener('click', () => setMode(returnMode));
 
 // ---------- toasts ----------
@@ -258,12 +333,17 @@ function handle(events: GameEvent[]) {
     switch (e.type) {
       case 'go':
         sfx.go();
-        toast(`Pick up ${game.job.passenger}`, t.pickup);
+        toast(`${MODES[game.mode].name} shift in ${currentCity().name}. Pick up ${game.job.passenger}`, t.pickup);
         break;
       case 'pickup':
         sfx.pickup();
         renderer.ring(game.taxi.pos, t.pickup);
-        toast(`${e.passenger} is in the cab`, t.pickup);
+        toast(
+          game.job.kind === 'vip' ? `VIP ${e.passenger} is in the cab. Double fare`
+            : game.job.kind === 'rush' ? `${e.passenger} is in a hurry. Step on it`
+            : `${e.passenger} is in the cab`,
+          game.job.kind === 'vip' ? '#E5A50A' : t.pickup,
+        );
         break;
       case 'dropoff':
         sfx.dropoff();
@@ -291,8 +371,10 @@ function handle(events: GameEvent[]) {
         sfx.powerup();
         renderer.ring(game.taxi.pos, e.kind === 'surge' ? '#FFD60A' : t.route);
         toast(
-          e.kind === 'surge' ? 'Surge: top speed boosted' : 'Ctrl+Alt+Del: the whole fleet is rebooting. Ram them',
-          e.kind === 'surge' ? '#FFD60A' : t.route,
+          e.kind === 'surge' ? 'Surge: top speed boosted'
+            : e.kind === 'repair' ? 'Repaired: cab condition restored'
+            : 'Ctrl+Alt+Del: the whole fleet is rebooting. Ram them',
+          e.kind === 'surge' ? '#FFD60A' : e.kind === 'repair' ? '#30D158' : t.route,
         );
         break;
       case 'recycled':
@@ -311,6 +393,31 @@ function handle(events: GameEvent[]) {
           f.classList.add('on');
         }
         if (game.lives > 0) toast('A robotaxi poached your fare', t.pursuit);
+        break;
+      case 'damage': {
+        cam.shake = Math.min(1, e.amount / 30);
+        const h = document.querySelector('.health')!;
+        h.classList.remove('hit');
+        void (h as HTMLElement).offsetWidth;
+        h.classList.add('hit');
+        if (e.amount >= 12) {
+          sfx.caught();
+          toast(game.rules.wrecks && game.health < 35 ? 'Cab badly damaged. One more crash could wreck it' : 'Crash: the cab took damage', t.pursuit);
+        }
+        break;
+      }
+      case 'wrecked':
+        toast('Cab wrecked. The next one off the rank is yours', t.pursuit);
+        break;
+      case 'tip':
+        sfx.dropoff();
+        bank(e.amount);
+        shiftTips += e.amount;
+        renderer.floatText(`+${money(e.amount)} tip`, { x: game.taxi.pos.x, y: game.taxi.pos.y - 22 }, '#30D158');
+        toast(`${e.passenger} tipped ${money(e.amount)} for the smooth ride`, '#30D158');
+        break;
+      case 'perk':
+        toast(e.kind === 'repair' ? 'A wrench dropped nearby' : 'Clean driving: a perk dropped nearby', t.route);
         break;
       case 'levelUp':
         toast(`Level ${e.level}: the fleet is getting faster`, t.route);
@@ -374,6 +481,16 @@ function updateHud() {
   setText('fareTitle', pickup ? `Pick up ${job.passenger}` : `Taking ${job.passenger}`);
   setText('fareWhere', pickup ? `Waiting at ${job.pickupLabel}` : `To ${job.dropoffLabel}`);
   $('fareDot').classList.toggle('dropoff', !pickup);
+  $('fareDot').classList.toggle('vip', job.kind === 'vip');
+  const badge = $('kindBadge');
+  badge.hidden = job.kind === 'regular';
+  setText('kindBadge', PASSENGER_KINDS[job.kind].label);
+  badge.classList.toggle('vip', job.kind === 'vip');
+  const hp = Math.round(g.health);
+  const hFill = $('healthFill');
+  hFill.style.transform = `scaleX(${hp / 100})`;
+  hFill.style.background = hp >= GAME_RULES.mintCondition ? 'var(--green)' : hp >= 40 ? 'var(--yellow)' : 'var(--red)';
+  setText('healthValue', hp >= GAME_RULES.mintCondition ? 'Mint' : hp >= 60 ? 'Dented' : hp >= 30 ? 'Battered' : g.rules.wrecks ? 'Critical' : 'Wrecked');
   setHtml('fareDot', pickup ? ICONS.person : ICONS.flag);
   setText('meterTime', formatClock(job.timeLeft));
   const ratio = job.timeLeft / job.timeTotal;
@@ -389,7 +506,7 @@ function updateHud() {
   setText('level', String(g.level));
   setHtml(
     'lives',
-    Array.from({ length: GAME_RULES.lives }, (_, i) => `<span class="life${i < g.lives ? '' : ' lost'}"></span>`).join(''),
+    Array.from({ length: g.rules.lives }, (_, i) => `<span class="life${i < g.lives ? '' : ' lost'}"></span>`).join(''),
   );
 
   const chips: string[] = [];
@@ -433,12 +550,12 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
-    return startShift(urlSeed || freshSeed());
+    return startShift();
   }
   if (e.code === 'KeyP' || e.code === 'Escape') {
     if (mode === 'playing') setMode('paused');
     else if (mode === 'paused') setMode('playing');
-    else if (mode === 'garage' || mode === 'settings') setMode(returnMode);
+    else if (mode === 'garage' || mode === 'settings' || mode === 'cities') setMode(returnMode);
     return;
   }
   if (e.code === 'KeyT') return cycleTheme();
@@ -450,7 +567,17 @@ window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && mode === 'playing') setMode('paused');
+  music.suspend(document.hidden);
 });
+// Browsers only allow audio after a gesture: start the title music on the first tap or key.
+const wake = () => {
+  music.unlock();
+  sfx.unlock();
+  window.removeEventListener('pointerdown', wake);
+  window.removeEventListener('keydown', wake);
+};
+window.addEventListener('pointerdown', wake);
+window.addEventListener('keydown', wake);
 
 window.addEventListener('pointerdown', (e) => {
   if (mode !== 'playing' || e.pointerType === 'mouse') return;
@@ -488,11 +615,36 @@ function currentInput(): DriveInput {
   return { throttle: 0, steer: 0 };
 }
 
-$('startButton').addEventListener('click', () => startShift(urlSeed || freshSeed()));
+$('startButton').addEventListener('click', () => startShift());
+$('cityButton').addEventListener('click', () => openOverlay('cities'));
+$('cityDone').addEventListener('click', () => setMode(returnMode));
+$('gearButton').addEventListener('click', () => {
+  setMode('paused');
+  openOverlay('settings');
+});
+document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
+  b.addEventListener('click', () => {
+    settings.mode = b.dataset.mode as ModeId;
+    saveSettings();
+    updateTitle();
+  }),
+);
+document.querySelectorAll<HTMLButtonElement>('[data-steer]').forEach((b) =>
+  b.addEventListener('click', () => {
+    settings.sensitivity = Number(b.dataset.steer);
+    saveSettings();
+    updateTitle();
+  }),
+);
+void STEERING_PRESETS;
 $('resumeButton').addEventListener('click', () => setMode('playing'));
 $('quitButton').addEventListener('click', endShift);
 $('againButton').addEventListener('click', () => startShift());
-$('replayButton').addEventListener('click', () => startShift(game.seed));
+$('replayButton').addEventListener('click', () => {
+  returnMode = 'title';
+  setMode('title');
+  openOverlay('cities');
+});
 $('pauseButton').addEventListener('click', () => setMode('paused'));
 $('themeButton').addEventListener('click', cycleTheme);
 $('soundButton').addEventListener('click', () => setMuted(!sfx.muted));
@@ -537,7 +689,7 @@ function frame(now: number) {
       y: (game.taxi.pos.y - cam.y) * cam.zoom + view.h / 2,
     };
     for (const { el, rect } of panelRects) el.classList.toggle('see-through', isObscured(taxiOnScreen, 20 * cam.zoom, rect));
-  } else if (mode === 'title' || (mode === 'garage' && returnMode === 'title') || (mode === 'settings' && returnMode === 'title')) {
+  } else if (mode === 'title' || ((mode === 'garage' || mode === 'settings' || mode === 'cities') && returnMode === 'title')) {
     // Attract mode: the fleet roams while the camera drifts across town.
     attractT += dt;
     for (const av of game.avs)
@@ -548,15 +700,18 @@ function frame(now: number) {
     updateCamera(cam, { pos, heading: 0, speed: 0 }, view, game.map, dt);
   }
 
-  const attract = mode === 'title' || ((mode === 'garage' || mode === 'settings') && returnMode === 'title');
+  const attract = mode === 'title' || ((mode === 'garage' || mode === 'settings' || mode === 'cities') && returnMode === 'title');
+  if (mode === 'playing') music.setIntensity(game.avs.some((a) => a.state === 'chase' || a.state === 'alert') ? 2 : 1);
   if (mode !== 'paused' && !(mode === 'settings' && returnMode === 'paused')) {
     renderer.render(game, cam, {
       theme: settings.theme,
       reducedMotion,
       braking: input.throttle < 0 && game.taxi.speed > 0,
       attract,
-      look: { paint: profile.equipped.paint, roof: profile.equipped.roof },
+      look: { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: currentCity().cab },
       insets,
+      robo: currentCity().robo,
+      landmarkNames: Object.fromEntries(currentCity().landmarks.map((l) => [l.id, l.name])),
     }, dt);
   }
   requestAnimationFrame(frame);

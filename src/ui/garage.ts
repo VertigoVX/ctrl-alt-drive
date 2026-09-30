@@ -27,6 +27,8 @@ export interface GarageDeps {
   getTheme(): ThemeId;
   setTheme(t: ThemeId): void;
   playHorn(id: string): void;
+  /** Current city's cab body, so previews match what you'll drive. */
+  getCab(): string;
   onClose(): void;
   reducedMotion: boolean;
 }
@@ -67,7 +69,7 @@ export class Garage {
   private previewLook(): { look: TaxiLook; theme: ThemeId } {
     const p = this.deps.getProfile();
     const item = itemById(this.selected);
-    const look: TaxiLook = { paint: p.equipped.paint, roof: p.equipped.roof };
+    const look: TaxiLook = { paint: p.equipped.paint, roof: p.equipped.roof, cab: this.deps.getCab() };
     let theme = this.deps.getTheme();
     if (item?.category === 'paint') look.paint = item.id;
     if (item?.category === 'roof') look.roof = item.id;
@@ -181,6 +183,7 @@ export class Garage {
             drawMiniTaxi(c, {
               paint: item.category === 'paint' ? item.id : p.equipped.paint,
               roof: item.category === 'roof' ? item.id : p.equipped.roof,
+              cab: this.deps.getCab(),
             }, 1.2);
         });
       }

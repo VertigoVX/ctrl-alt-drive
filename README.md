@@ -2,7 +2,7 @@
 
 You're the last human cab in a city of robotaxis. Get every fare there before the self-driving fleet gets you.
 
-A top-down chase game in the spirit of Pac-Man, dressed as a navigation app. Drive a yellow cab through a procedurally generated city, follow the blue route to your passenger, and stay out of the headlights of the self-driving cars patrolling the streets.
+A top-down chase game in the spirit of Pac-Man, dressed as a navigation app. Pick a city, drive its signature cab, follow the blue route to your passenger, and stay out of the headlights of the self-driving cars patrolling the streets.
 
 **[Play it](https://vertigovx.github.io/ctrl-alt-drive/)**
 
@@ -21,16 +21,34 @@ A top-down chase game in the spirit of Pac-Man, dressed as a navigation app. Dri
 | Cycle map style | <kbd>T</kbd> |
 | Sound | <kbd>M</kbd> |
 
-Steering sensitivity can be adjusted from 50% to 150% in **Settings** (title screen or pause menu).
+Steering has one-tap presets (Gentle, Standard, Sharp) on the title screen, and a fine-grained slider in **Settings**, which is also reachable mid-shift from the gear button.
 
 - **Fares.** Pick up at the green pin, drop off at the red one. The meter covers the whole trip, and whatever time is left when you arrive is paid as a bonus. Let it run out and the passenger calls a robotaxi instead.
 - **The fleet.** Self-driving cars cruise with their lidar sweeping ahead. The moment one sees you, its headlights flash on and it gives chase. Break its line of sight (buildings block it; water and parks don't) and it searches where it last saw you before giving up.
 - **Getting caught** costs you a cab and the passenger. Lose three cabs and the shift is over.
 - **Power-ups** appear as keycaps on the road. <kbd>Del</kbd> reboots the whole fleet for a few seconds, and you can ram rebooting cars off the road for points. The lightning key is a Surge: extra top speed for four seconds.
 - **Levels.** Every two fares, more cars join the fleet and they get faster.
+- **Modes.** *Normal* is three cabs, and crashes only dent your pride (and your tips). *Hard* is two cabs: wreck one and it's gone, the fleet is faster, and it pays 1.5×. *Extreme* is two cabs with heavier crash damage that carries over when you're caught, and pays 2×.
+- **Cab condition.** Real crashes (not kerb scrapes) dent the cab. Finish a fare in mint condition for a chance of a tip, or a perk dropped nearby. A wrench key on the road repairs damage.
+- **Passengers.** Some are in a hurry (tight meter, better pay), some are sightseeing (relaxed meter), and business travellers tip well. Very rarely a VIP flags you down, shown by a gold pin: Shingai, Mark, Tiago or Denisha. VIPs pay double.
 - **The garage.** Every fare you complete is banked in your wallet, even if the shift ends badly. Spend it on paint jobs, roof lights, horns and map styles (Vintage, Blueprint, Neon Noir). Everything in the garage is cosmetic: nothing you buy makes the game easier. Your wallet and garage are saved in your browser.
 
-Every city is generated from a seed. Add `?seed=12345` to the URL to drive a specific city again, or to challenge a friend on the same map.
+### Cities
+
+| City | Your cab | Landmarks |
+|---|---|---|
+| New York | Yellow cab | Central Park, Empire State Building |
+| London | Black cab | Elizabeth Tower, the London Eye |
+| Hong Kong | Red taxi | Harbour tower, temple garden |
+| Cape Town | Minibus taxi | Table Mountain, the stadium |
+| Sydney | Harbour taxi | Opera House, botanic garden |
+| Singapore | Blue taxi | Bayfront towers, the Merlion |
+| Paris | Taxi parisien | Eiffel Tower, Arc de Triomphe |
+| Tokyo | Tokyo taxi (and JDM-style robotaxis) | Shibuya Crossing, Shinjuku towers |
+
+Each city has a fixed, hand-tuned layout you can learn, with local street names and passengers; traffic and fares vary every run. Link straight to one with `?city=tokyo`. The cities stay alive around you: lit windows, street lamps, traffic lights, pedestrians, park trees and boats on the water.
+
+The soundtrack is an original chiptune loop composed as note data and synthesised live with Web Audio. It builds when a robotaxi is on your tail.
 
 ## Development
 
@@ -50,7 +68,7 @@ Requires Node 20 or newer. Add `?debug` to the URL to expose the live game state
 
 ### Built test-first
 
-All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 125 tests at about 98% line coverage.
+All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 218 tests at about 98% line coverage.
 
 What makes that practical is a hard split. Everything that decides *what happens* lives in `src/core` as pure, deterministic TypeScript with no DOM access. Randomness comes from a seeded RNG, so a city, a spawn, or an AV's patrol can be reproduced exactly in a test. The renderer and HUD only read game state and draw it.
 
@@ -62,12 +80,15 @@ src/
     vision.ts         line-of-sight ray marching, sight cones, visibility fans
     vehicle.ts        arcade handling: throttle, steering, lane assist, wall sliding
     autonomous.ts     self-driving car state machine
-    game.ts           rules: fares, meter, catching, lives, spawner, levels, power-ups
+    game.ts           rules: fares, meter, catching, damage, lives, spawner, levels, power-ups
+    cities.ts         the eight cities: layouts, landmarks, streets, passengers
+    modes.ts          Normal / Hard / Extreme rules
+    passengers.ts     passenger types and VIPs
     shop.ts           garage catalogue, wallet, buying/equipping, tamper-safe saves
     settings.ts       player settings (steering sensitivity, sound, map style)
     camera.ts  input.ts  format.ts  math.ts  rng.ts
-  render/             canvas renderer, map themes, taxi sprite, garage previews
-  ui/                 garage controller, synthesized sound effects
+  render/             canvas renderer, map themes, city cabs, landmarks and ambient life
+  ui/                 garage controller, synthesized sound effects and music
   main.ts             game loop, HUD binding, input wiring
 tests/                Vitest specs, one file per core module
 scripts/balance.ts    difficulty probe
@@ -81,7 +102,7 @@ scripts/balance.ts    difficulty probe
 
 **What you see is what they see.** Headlight cones are drawn from the same ray-marched line of sight the AI uses. A beam cut off by a building means the car genuinely can't see past it.
 
-**Tuned with a bot.** `npm run balance` plays 30 cities with a bot that follows the route perfectly and ignores the fleet. It averages about four fares and a minute of survival before losing all three cabs, and never runs out the meter. Raw speed isn't enough; you have to evade.
+**Tuned with a bot.** `npm run balance` plays every mode across the cities with a bot that follows the route, brakes for corners and ignores the fleet. On Normal it averages about two and a half fares before losing all three cabs; Hard and Extreme are progressively harsher. Raw driving isn't enough; you have to evade. The same probe set the crash-damage threshold: measuring every wall contact showed that impacts below 90 are almost all kerb scrapes while cornering, so only real crashes dent the cab.
 
 **The garage can't be pay-to-win, by construction.** Shop items carry only an id, a name, a price and a blurb. How each one looks or sounds lives in the render and audio layers, and a test fails if anyone adds a gameplay field to the catalogue. Saves are parsed defensively too: a corrupted or hand-edited save falls back to safe defaults instead of crashing or equipping things you don't own.
 
