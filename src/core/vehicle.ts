@@ -12,18 +12,24 @@ export interface Handling {
   turnSpeedRef: number;
   /** How strongly heading settles onto the road axis when the player isn't steering. */
   laneAssist: number;
+  /** Fraction of full acceleration available from a standstill; builds to 1 by `launchSpeed`. */
+  launchGrip: number;
+  launchSpeed: number;
 }
 
 export const DEFAULT_HANDLING: Handling = {
   maxSpeed: 270,
   maxReverse: 110,
-  accel: 430,
+  accel: 310,
   brake: 800,
   coast: 260,
   // 40% gentler than the launch tuning (3.4): players found small taps over-steered.
   turnRate: 3.4 * 0.6,
   turnSpeedRef: 90,
   laneAssist: 8,
+  // Gentle pull-away: players were launching into walls from a standstill.
+  launchGrip: 0.35,
+  launchSpeed: 140,
 };
 
 export interface Vehicle {
@@ -65,7 +71,9 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function updateVehicle(v: Vehicle, input: DriveInput, dt: number, map: CityMap, boost = 1, h = DEFAULT_HANDLING) {
   const maxSpeed = h.maxSpeed * boost;
-  const accel = h.accel * boost;
+  // Acceleration builds with speed, so pulling away is gradual and controllable.
+  const grip = h.launchGrip + (1 - h.launchGrip) * Math.min(1, Math.abs(v.speed) / h.launchSpeed);
+  const accel = h.accel * boost * grip;
 
   // Longitudinal.
   if (input.throttle > 0) {

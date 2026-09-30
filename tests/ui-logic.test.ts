@@ -80,7 +80,7 @@ describe('formatting', () => {
       roadRows: [1, 3], roadCols: [1, 3],
       rowNames: new Map([[1, 'Juniper St'], [3, 'Harbor St']]),
       colNames: new Map([[1, 'Cedar Ave'], [3, 'Mercer Ave']]),
-      buildings: [],
+      buildings: [], landmarks: [],
     };
     const d = describeDirections(map, [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }]);
     expect(d).toEqual({ icon: 'right', distance: '100 m', instruction: 'Turn right onto Mercer Ave' });

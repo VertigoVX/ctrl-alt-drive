@@ -7,7 +7,7 @@ function makeMap(rows: string[]): CityMap {
   return {
     width: rows[0].length, height: rows.length, tileSize: 64, seed: 0,
     tiles: rows.join('').split('').map((c) => legend[c]),
-    roadRows: [], roadCols: [], rowNames: new Map(), colNames: new Map(), buildings: [],
+    roadRows: [], roadCols: [], rowNames: new Map(), colNames: new Map(), buildings: [], landmarks: [],
   };
 }
 
@@ -74,6 +74,7 @@ describe('vehicle handling', () => {
 
   it('slides along walls instead of sticking', () => {
     const v = createVehicle(tileCenter(map, 2, 1), -0.4); // pointed slightly into the top wall, mostly east
+    v.speed = 150; // already moving: this is about grazing a wall, not launching
     const startX = v.pos.x;
     run(v, gas, 0.6);
     expect(v.pos.x).toBeGreaterThan(startX + 40);

@@ -35,6 +35,16 @@ export interface CityMap {
   rowNames: Map<number, string>;
   colNames: Map<number, string>;
   buildings: BuildingLot[];
+  landmarks: Landmark[];
+}
+
+export interface Landmark {
+  id: string;
+  /** Tile-space footprint. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface CityOptions {
@@ -218,6 +228,7 @@ function attempt(opts: CityOptions, seed: number): CityMap {
     rowNames: new Map(),
     colNames: new Map(),
     buildings: [],
+    landmarks: [],
   };
   const { roadRows: rows, roadCols: cols } = map;
 

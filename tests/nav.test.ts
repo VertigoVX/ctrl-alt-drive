@@ -25,7 +25,7 @@ function makeMap(rows: string[]): CityMap {
     roadCols: [],
     rowNames: new Map(),
     colNames: new Map(),
-    buildings: [],
+    buildings: [], landmarks: [],
   };
 }
 

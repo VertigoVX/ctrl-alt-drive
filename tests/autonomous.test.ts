@@ -9,7 +9,7 @@ function makeMap(rows: string[]): CityMap {
   return {
     width: rows[0].length, height: rows.length, tileSize: 64, seed: 0,
     tiles: rows.join('').split('').map((c) => legend[c]),
-    roadRows: [], roadCols: [], rowNames: new Map(), colNames: new Map(), buildings: [],
+    roadRows: [], roadCols: [], rowNames: new Map(), colNames: new Map(), buildings: [], landmarks: [],
   };
 }
 
