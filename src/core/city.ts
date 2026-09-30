@@ -45,6 +45,18 @@ export interface Landmark {
   y: number;
   w: number;
   h: number;
+  /** Drawn over the road (e.g. a scramble crossing) rather than occupying land. */
+  overlay?: boolean;
+}
+
+export type LandmarkKind = 'building' | 'park' | 'plaza' | 'mountain' | 'crossing';
+
+export interface LandmarkSpec {
+  id: string;
+  kind: LandmarkKind;
+  /** Size in city blocks (the streets between them are absorbed). */
+  blocks: [number, number];
+  near: 'river' | 'center' | 'edge' | 'any';
 }
 
 export interface CityOptions {
@@ -52,6 +64,15 @@ export interface CityOptions {
   height: number;
   seed: number;
   tileSize?: number;
+  riverAxis?: 'vertical' | 'horizontal';
+  parkChance?: number;
+  /** Chance of knocking out each interior street segment: higher = more maze-like. */
+  cutChance?: number;
+  blockMin?: number;
+  blockMax?: number;
+  landmarks?: LandmarkSpec[];
+  rowNames?: readonly string[];
+  colNames?: readonly string[];
 }
 
 const STREET_NAMES = [
@@ -108,11 +129,11 @@ export function streetNameAt(map: CityMap, x: number, y: number): string {
 
 // ---------------------------------------------------------------------------
 
-function pickLines(rng: Rng, size: number): number[] {
+function pickLines(rng: Rng, size: number, min = 4, max = 6): number[] {
   const lines = [1];
   let cur = 1;
   while (true) {
-    const next = cur + rng.int(4, 6);
+    const next = cur + rng.int(min, max);
     if (next >= size - 4) break;
     lines.push(next);
     cur = next;
@@ -179,8 +200,8 @@ function keepLargestComponent(map: CityMap) {
   }
 }
 
-function placeBuildings(map: CityMap, rng: Rng) {
-  const covered = new Uint8Array(map.tiles.length);
+function placeBuildings(map: CityMap, rng: Rng, reserved: Uint8Array) {
+  const covered = Uint8Array.from(reserved);
   const ts = map.tileSize;
   const inset = ts * 0.12;
   for (let y = 0; y < map.height; y++) {
@@ -214,23 +235,45 @@ function placeBuildings(map: CityMap, rng: Rng) {
   }
 }
 
+function transpose(map: CityMap, reserved: Uint8Array): Uint8Array {
+  const { width: w, height: h } = map;
+  const tiles = new Array<Tile>(w * h);
+  const res = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      tiles[x * h + y] = map.tiles[y * w + x];
+      res[x * h + y] = reserved[y * w + x];
+    }
+  map.tiles = tiles;
+  map.width = h;
+  map.height = w;
+  [map.roadRows, map.roadCols] = [map.roadCols, map.roadRows];
+  map.landmarks = map.landmarks.map((l) => ({ ...l, x: l.y, y: l.x, w: l.h, h: l.w }));
+  return res;
+}
+
 function attempt(opts: CityOptions, seed: number): CityMap {
   const rng = createRng(seed);
-  const { width, height } = opts;
+  const horizontal = opts.riverAxis === 'horizontal';
+  // A horizontal river is built as a vertical one on a transposed grid, then flipped.
+  const width = horizontal ? opts.height : opts.width;
+  const height = horizontal ? opts.width : opts.height;
   const map: CityMap = {
     width,
     height,
     tileSize: opts.tileSize ?? 64,
     seed: opts.seed,
     tiles: new Array(width * height).fill(Tile.Building),
-    roadRows: pickLines(rng, height),
-    roadCols: pickLines(rng, width),
+    roadRows: pickLines(rng, height, opts.blockMin, opts.blockMax),
+    roadCols: pickLines(rng, width, opts.blockMin, opts.blockMax),
     rowNames: new Map(),
     colNames: new Map(),
     buildings: [],
     landmarks: [],
   };
+  let reserved: Uint8Array = new Uint8Array(width * height);
   const { roadRows: rows, roadCols: cols } = map;
+  const cutChance = opts.cutChance ?? 0.2;
 
   // 1. Full street grid.
   for (const r of rows) for (let x = cols[0]; x <= cols[cols.length - 1]; x++) set(map, x, r, Tile.Road);
@@ -239,23 +282,71 @@ function attempt(opts: CityOptions, seed: number): CityMap {
   // 2. Parks on some blocks.
   for (let ri = 0; ri < rows.length - 1; ri++)
     for (let ci = 0; ci < cols.length - 1; ci++)
-      if (rng.chance(0.12))
+      if (rng.chance(opts.parkChance ?? 0.12))
         for (let y = rows[ri] + 1; y < rows[ri + 1]; y++)
           for (let x = cols[ci] + 1; x < cols[ci + 1]; x++) set(map, x, y, Tile.Park);
 
-  // 3. Knock out interior street segments to create varied, maze-like routes.
+  // 3. Choose the river's block column now so landmarks can sit beside it.
+  const mid = Math.floor((cols.length - 1) / 2);
+  const riverBlock = rng.int(Math.max(1, mid - 1), Math.min(cols.length - 3, mid + 1));
+
+  // 4. Landmarks claim whole blocks.
+  const usedBlocks = new Set<string>();
+  const nBlocksX = cols.length - 1, nBlocksY = rows.length - 1;
+  for (const spec of opts.landmarks ?? []) {
+    if (spec.kind === 'crossing') continue; // placed on a junction after clean-up
+    const [bw, bh] = spec.blocks;
+    const candidates: { ci: number; ri: number; score: number }[] = [];
+    for (let ri = 0; ri + bh <= nBlocksY; ri++)
+      for (let ci = 0; ci + bw <= nBlocksX; ci++) {
+        if (ci <= riverBlock && ci + bw - 1 >= riverBlock) continue;
+        let clash = false;
+        for (let y = ri - 1; y <= ri + bh; y++) for (let x = ci - 1; x <= ci + bw; x++) if (usedBlocks.has(`${x},${y}`)) clash = true;
+        if (clash) continue;
+        const cx = ci + bw / 2, cy = ri + bh / 2;
+        const midY = nBlocksY / 2;
+        let score: number;
+        switch (spec.near) {
+          case 'river':
+            score = Math.min(Math.abs(ci + bw - 1 - (riverBlock - 1)), Math.abs(ci - (riverBlock + 1))) * 10 + Math.abs(cy - midY);
+            break;
+          case 'center':
+            score = Math.hypot(cx - nBlocksX / 2, cy - nBlocksY / 2);
+            break;
+          case 'edge':
+            score = Math.min(ri, nBlocksY - (ri + bh)) * 10 - Math.abs(cx - riverBlock);
+            break;
+          default:
+            score = rng.next() * 10;
+        }
+        candidates.push({ ci, ri, score: score + rng.next() * 0.5 });
+      }
+    candidates.sort((a, b) => a.score - b.score);
+    const pick = candidates[0];
+    if (!pick) continue;
+    for (let y = pick.ri; y < pick.ri + bh; y++) for (let x = pick.ci; x < pick.ci + bw; x++) usedBlocks.add(`${x},${y}`);
+    const x0 = cols[pick.ci] + 1, x1 = cols[pick.ci + bw] - 1;
+    const y0 = rows[pick.ri] + 1, y1 = rows[pick.ri + bh] - 1;
+    const fill = spec.kind === 'park' || spec.kind === 'plaza' ? Tile.Park : Tile.Building;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        set(map, x, y, fill);
+        reserved[y * width + x] = 1;
+      }
+    map.landmarks.push({ id: spec.id, x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+  }
+
+  // 5. Knock out interior street segments to create varied, maze-like routes.
   const interiorRows = rows.slice(1, -1);
   const interiorCols = cols.slice(1, -1);
   for (const r of interiorRows)
     for (let ci = 0; ci < cols.length - 1; ci++)
-      if (rng.chance(0.2)) for (let x = cols[ci] + 1; x < cols[ci + 1]; x++) set(map, x, r, Tile.Building);
+      if (rng.chance(cutChance)) for (let x = cols[ci] + 1; x < cols[ci + 1]; x++) set(map, x, r, Tile.Building);
   for (const c of interiorCols)
     for (let ri = 0; ri < rows.length - 1; ri++)
-      if (rng.chance(0.2)) for (let y = rows[ri] + 1; y < rows[ri + 1]; y++) set(map, c, y, Tile.Building);
+      if (rng.chance(cutChance)) for (let y = rows[ri] + 1; y < rows[ri + 1]; y++) set(map, c, y, Tile.Building);
 
-  // 4. A river running north–south through one block column near the middle.
-  const mid = Math.floor((cols.length - 1) / 2);
-  const riverBlock = rng.int(Math.max(1, mid - 1), Math.min(cols.length - 3, mid + 1));
+  // 6. The river, through the chosen block column.
   const rx0 = cols[riverBlock] + 1;
   const rx1 = cols[riverBlock + 1] - 1;
   const bridgeRows = new Set<number>();
@@ -263,38 +354,54 @@ function attempt(opts: CityOptions, seed: number): CityMap {
   const nBridges = Math.max(2, Math.round(rows.length * 0.45));
   shuffled.slice(0, nBridges).forEach((r) => bridgeRows.add(r));
   for (let y = 0; y < height; y++)
-    for (let x = rx0; x <= rx1; x++) {
-      if (bridgeRows.has(y)) set(map, x, y, Tile.Bridge);
-      else set(map, x, y, Tile.Water);
-    }
-  // Soft riverbanks: occasionally widen into the neighbouring block interior.
+    for (let x = rx0; x <= rx1; x++) set(map, x, y, bridgeRows.has(y) ? Tile.Bridge : Tile.Water);
   for (let y = 0; y < height; y++) {
     if (rows.includes(y)) continue;
-    if (rng.chance(0.25) && tileAt(map, rx0 - 1, y) !== Tile.Road) set(map, rx0 - 1, y, Tile.Water);
-    if (rng.chance(0.25) && tileAt(map, rx1 + 1, y) !== Tile.Road) set(map, rx1 + 1, y, Tile.Water);
+    const widen = (x: number) => {
+      if (reserved[y * width + x] || tileAt(map, x, y) === Tile.Road) return;
+      set(map, x, y, Tile.Water);
+    };
+    if (rng.chance(0.25)) widen(rx0 - 1);
+    if (rng.chance(0.25)) widen(rx1 + 1);
   }
 
-  // 5. Clean-up so the network is pac-man friendly.
+  // 7. Clean-up so the network is pac-man friendly.
   pruneDeadEnds(map);
   keepLargestComponent(map);
   pruneDeadEnds(map);
 
-  // 6. Names.
-  const names = [...STREET_NAMES].sort(() => rng.next() - 0.5);
-  rows.forEach((r, i) => map.rowNames.set(r, `${names[i % names.length]} St`));
-  cols.forEach((c, i) => map.colNames.set(c, `${names[(i + rows.length) % names.length]} Ave`));
+  if (horizontal) reserved = transpose(map, reserved);
 
-  placeBuildings(map, rng);
+  // 8. Overlay landmarks that live on the road itself.
+  for (const spec of opts.landmarks ?? []) {
+    if (spec.kind !== 'crossing') continue;
+    const junctions = roadTiles(map).filter((t) => drivableNeighbours(map, t.x, t.y).length === 4 && tileAt(map, t.x, t.y) === Tile.Road);
+    const c = { x: map.width / 2, y: map.height / 2 };
+    const best = junctions.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
+    if (best) map.landmarks.push({ id: spec.id, x: best.x, y: best.y, w: 1, h: 1, overlay: true });
+  }
+
+  // 9. Names.
+  const names = [...STREET_NAMES].sort(() => rng.next() - 0.5);
+  const rowList = opts.rowNames ?? names.map((n) => `${n} St`);
+  const colList = opts.colNames ?? names.map((n) => `${n} Ave`);
+  const rowOffset = opts.rowNames ? 0 : 0;
+  const colOffset = opts.colNames ? 0 : map.roadRows.length;
+  map.roadRows.forEach((r, i) => map.rowNames.set(r, rowList[(i + rowOffset) % rowList.length]));
+  map.roadCols.forEach((c, i) => map.colNames.set(c, colList[(i + colOffset) % colList.length]));
+
+  placeBuildings(map, rng, reserved);
   return map;
 }
 
 export function generateCity(opts: CityOptions): CityMap {
   // Rarely, the random cuts leave too little city; retry with a derived seed until it's playable.
-  for (let i = 0; i < 20; i++) {
+  const wanted = (opts.landmarks ?? []).length;
+  for (let i = 0; i < 40; i++) {
     const map = attempt(opts, opts.seed + i * 7919);
     const bridges = map.tiles.filter((t) => t === Tile.Bridge).length;
     const roads = roadTiles(map).length;
-    if (bridges >= 2 && roads > map.width * map.height * 0.2) return map;
+    if (bridges >= 2 && roads > map.width * map.height * 0.2 && map.landmarks.length === wanted) return map;
   }
   throw new Error('Could not generate a playable city');
 }

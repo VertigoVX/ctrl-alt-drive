@@ -5,6 +5,7 @@ import {
 } from './city';
 import { dist, type Vec } from './math';
 import { distanceField, findPath } from './pathfinding';
+import { generateCityMap, type CityDef, type CityId } from './cities';
 import { MODES, type ModeId, type ModeRules } from './modes';
 import { PASSENGER_KINDS, pickPassenger, type PassengerKind } from './passengers';
 import { createRng, type Rng } from './rng';
@@ -88,6 +89,8 @@ export type GameEvent =
 
 export interface GameState {
   seed: number;
+  /** The named city being played, if any. */
+  city: CityId | null;
   mode: ModeId;
   rules: ModeRules;
   /** 0–100. */
@@ -200,13 +203,17 @@ function refreshRoute(g: GameState) {
 export interface GameOptions {
   seed: number;
   mode?: ModeId;
+  city?: CityDef;
   passengerNames?: readonly string[];
   width?: number;
   height?: number;
 }
 
 export function createGame(opts: GameOptions): GameState {
-  const map = generateCity({ width: opts.width ?? 44, height: opts.height ?? 32, seed: opts.seed });
+  // A named city always has the same layout; the run seed only varies traffic and fares.
+  const map = opts.city
+    ? generateCityMap(opts.city)
+    : generateCity({ width: opts.width ?? 44, height: opts.height ?? 32, seed: opts.seed });
   const rng = createRng(opts.seed ^ 0x5eed);
   // Start the taxi near the middle of town, pointing down its street.
   const roads = roadTiles(map);
@@ -216,8 +223,8 @@ export function createGame(opts: GameOptions): GameState {
 
   const rules = MODES[opts.mode ?? 'normal'];
   const g: GameState = {
-    seed: opts.seed, mode: rules.id, rules, health: 100, damageCooldown: 0,
-    passengerNames: opts.passengerNames ?? DEFAULT_PASSENGERS,
+    seed: opts.seed, city: opts.city?.id ?? null, mode: rules.id, rules, health: 100, damageCooldown: 0,
+    passengerNames: opts.passengerNames ?? opts.city?.passengers ?? DEFAULT_PASSENGERS,
     map, rng, taxi, avs: [], route: [], powerups: [],
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,

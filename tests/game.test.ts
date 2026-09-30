@@ -169,6 +169,7 @@ describe('getting caught', () => {
 describe('spawning', () => {
   it('adds self-driving cars over time, up to the cap for the level', () => {
     const g = playing();
+    g.lives = 99; // a parked taxi gets caught; keep the shift going so spawning can be observed
     run(g, 60);
     expect(g.avs.length).toBeGreaterThan(GAME_RULES.initialAvs);
     expect(g.avs.length).toBeLessThanOrEqual(GAME_RULES.maxAvs(g.level));
