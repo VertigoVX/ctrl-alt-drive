@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_HANDLING } from '../src/core/vehicle';
 import { inputFromStick, STICK_GAIN } from '../src/core/input';
 import { createGame, updateGame, GAME_RULES } from '../src/core/game';
-import { parseSettings, DEFAULT_SETTINGS, SENSITIVITY_RANGE } from '../src/core/settings';
+import { parseSettings, DEFAULT_SETTINGS, SENSITIVITY_RANGE, SETTINGS_VERSION, STEERING_PRESETS } from '../src/core/settings';
 
 describe('steering sensitivity', () => {
   it('turns 40% more gently than the original tuning (3.4 rad/s)', () => {
@@ -49,8 +49,14 @@ describe('settings persistence', () => {
     expect(parseSettings(JSON.stringify({ sensitivity: 'fast' })).sensitivity).toBe(DEFAULT_SETTINGS.sensitivity);
   });
 
-  it('defaults to 100% (the new, gentler baseline)', () => {
-    expect(DEFAULT_SETTINGS.sensitivity).toBe(1);
+  it('defaults to 125%: playtesting found most players, touch players especially, want sharper steering', () => {
+    expect(DEFAULT_SETTINGS.sensitivity).toBe(1.25);
+    expect(parseSettings(null).sensitivity).toBe(1.25);
+  });
+
+  it('is still gentler than the launch tuning that players called too twitchy (75% of its turn rate)', async () => {
+    const { DEFAULT_HANDLING } = await import('../src/core/vehicle');
+    expect(DEFAULT_HANDLING.turnRate * DEFAULT_SETTINGS.sensitivity).toBeCloseTo(3.4 * 0.75, 5);
   });
 });
 
@@ -67,8 +73,50 @@ describe('settings remember city, mode and music', () => {
     expect([bad.city, bad.mode, bad.music]).toEqual(['new-york', 'normal', true]);
   });
   it('offers steering presets', async () => {
-    const { STEERING_PRESETS } = await import('../src/core/settings');
     expect(STEERING_PRESETS.map((p) => p.label)).toEqual(['Gentle', 'Standard', 'Sharp']);
-    expect(STEERING_PRESETS.find((p) => p.label === 'Standard')!.value).toBe(1);
+    expect(STEERING_PRESETS.find((p) => p.label === 'Standard')!.value).toBe(DEFAULT_SETTINGS.sensitivity);
+    const values = STEERING_PRESETS.map((p) => p.value);
+    expect(values).toEqual([...values].sort((a, b) => a - b));
+    for (const v of values) {
+      expect(v).toBeGreaterThanOrEqual(SENSITIVITY_RANGE.min);
+      expect(v).toBeLessThanOrEqual(SENSITIVITY_RANGE.max);
+    }
+  });
+});
+
+describe('upgrading saved settings from the old 100% default', () => {
+  it('moves a legacy save that is still on the old default to the new default', () => {
+    const legacy = JSON.stringify({ sensitivity: 1, muted: false, theme: 'night', city: 'tokyo', mode: 'hard', music: true });
+    const s = parseSettings(legacy);
+    expect(s.sensitivity).toBe(1.25);
+    expect([s.city, s.mode]).toEqual(['tokyo', 'hard']); // everything else is kept
+  });
+
+  it('leaves legacy saves that were customised alone', () => {
+    for (const v of [0.6, 0.8, 1.1, 1.3, 1.5]) expect(parseSettings(JSON.stringify({ sensitivity: v })).sensitivity).toBe(v);
+  });
+
+  it('respects a deliberate 100% chosen after the upgrade', () => {
+    const upgraded = parseSettings(JSON.stringify({ sensitivity: 1, version: SETTINGS_VERSION }));
+    expect(upgraded.sensitivity).toBe(1);
+  });
+
+  it('stamps the current version so the migration only ever runs once', () => {
+    expect(parseSettings(null).version).toBe(SETTINGS_VERSION);
+    const once = parseSettings(JSON.stringify({ sensitivity: 1 }));
+    expect(parseSettings(JSON.stringify(once)).sensitivity).toBe(1.25);
+    const afterUserChoice = { ...once, sensitivity: 1 };
+    expect(parseSettings(JSON.stringify(afterUserChoice)).sensitivity).toBe(1);
+  });
+});
+
+describe('describing a sensitivity', () => {
+  it('names the three presets correctly and puts the default in the middle', async () => {
+    const { describeSensitivity } = await import('../src/core/settings');
+    expect(describeSensitivity(DEFAULT_SETTINGS.sensitivity)).toBe('Standard');
+    expect(describeSensitivity(1)).toBe('Gentle');
+    expect(describeSensitivity(0.6)).toBe('Gentle');
+    expect(describeSensitivity(1.5)).toBe('Sharp');
+    for (const p of STEERING_PRESETS) expect(describeSensitivity(p.value)).toBe(p.label);
   });
 });
