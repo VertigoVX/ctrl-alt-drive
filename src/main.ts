@@ -7,7 +7,7 @@ import { MODES, type ModeId } from './core/modes';
 import { PASSENGER_KINDS } from './core/passengers';
 import { createStickMemory, inputFromKeys, inputFromStick } from './core/input';
 import { createRng } from './core/rng';
-import { parseSettings, STEERING_PRESETS, type Settings, type ThemeId } from './core/settings';
+import { describeSensitivity, parseSettings, STEERING_PRESETS, type Settings, type ThemeId } from './core/settings';
 import { addEarnings, availableThemes, CATALOG, equip, parseProfile, type Profile } from './core/shop';
 import type { DriveInput } from './core/vehicle';
 import { drawMiniTaxi } from './render/garagePreview';
@@ -75,7 +75,11 @@ const urlCity = new URLSearchParams(location.search).get('city');
 if (urlCity && CITIES.some((c) => c.id === urlCity)) settings.city = cityById(urlCity).id;
 const freshSeed = () => Math.floor(Math.random() * 900000) + 100000;
 const currentCity = (): CityDef => cityById(settings.city);
-const newGame = () => createGame({ seed: freshSeed(), city: currentCity(), mode: settings.mode });
+const newGame = () => {
+  const g = createGame({ seed: freshSeed(), city: currentCity(), mode: settings.mode });
+  g.steeringSensitivity = settings.sensitivity;
+  return g;
+};
 let game: GameState = newGame();
 let shiftTips = 0;
 const canvas = $<HTMLCanvasElement>('map');
@@ -302,12 +306,11 @@ function endShift() {
 
 // ---------- settings panel ----------
 
-const sensitivityWord = (v: number) => (v < 0.8 ? 'Gentle' : v > 1.2 ? 'Sharp' : 'Standard');
 function syncSettingsPanel() {
   const pct = Math.round(settings.sensitivity * 100);
   ($('sensitivity') as HTMLInputElement).value = String(pct);
   $('sensitivityValue').textContent = `${pct}%`;
-  $('sensitivityWord').textContent = sensitivityWord(settings.sensitivity);
+  $('sensitivityWord').textContent = describeSensitivity(settings.sensitivity);
   $('musicSwitch').setAttribute('aria-checked', String(settings.music));
   applySound();
 }
@@ -670,7 +673,12 @@ document.querySelectorAll<HTMLButtonElement>('[data-steer]').forEach((b) =>
     updateTitle();
   }),
 );
-void STEERING_PRESETS;
+// The steering buttons are built from the settings module, so presets can't drift from the defaults.
+document.querySelectorAll<HTMLButtonElement>('[data-steer]').forEach((b, i) => {
+  const preset = STEERING_PRESETS[i];
+  b.dataset.steer = String(preset.value);
+  b.textContent = preset.label;
+});
 $('resumeButton').addEventListener('click', () => setMode('playing'));
 $('restartButton').addEventListener('click', restartShift);
 $('menuButton').addEventListener('click', quitToTitle);

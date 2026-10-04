@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CITIES, CITY_IDS, cityById, generateCityMap } from '../src/core/cities';
 import { roadTiles, drivableNeighbours, isDrivable, tileAt, Tile, streetNameAt, worldToTile, type CityMap } from '../src/core/city';
 import { createGame } from '../src/core/game';
+import { GLOBAL_NAMES, VIP_NAMES } from '../src/core/passengers';
 
 function components(map: CityMap) {
   const seen = new Set<number>();
@@ -35,7 +36,7 @@ describe('the city list', () => {
 
   it('gives every city local passengers and landmarks', () => {
     for (const c of CITIES) {
-      expect(c.passengers.length).toBeGreaterThanOrEqual(8);
+      expect(c.passengers.length).toBeGreaterThanOrEqual(35);
       expect(c.landmarks.length).toBeGreaterThanOrEqual(1);
     }
   });
@@ -103,7 +104,7 @@ describe('playing a city', () => {
     expect(g.city).toBe('london');
     for (let i = 0; i < 20; i++) {
       const name = g.job.passenger;
-      expect([...city.passengers, 'Shingai', 'Mark', 'Tiago', 'Denisha']).toContain(name);
+      expect([...city.passengers, ...GLOBAL_NAMES, ...VIP_NAMES]).toContain(name);
       g.job = (createGame({ seed: 100 + i, city })).job;
     }
   });

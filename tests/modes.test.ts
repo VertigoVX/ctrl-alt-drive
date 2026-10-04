@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MODES, type ModeId } from '../src/core/modes';
-import { pickPassenger, VIP_NAMES, PASSENGER_KINDS } from '../src/core/passengers';
+import { Roster, VIP_NAMES, PASSENGER_KINDS } from '../src/core/passengers';
 import { createGame, updateGame, GAME_RULES, type GameState, type GameEvent } from '../src/core/game';
 import { createRng } from '../src/core/rng';
 import { drivableNeighbours, roadTiles, tileCenter, isDrivable, tileAt } from '../src/core/city';
@@ -185,11 +185,11 @@ describe('clean-cab bonuses', () => {
 
 describe('passengers', () => {
   const names = ['Ada', 'Ben'];
-  it('VIPs are rare (around 4%) and always one of the four', () => {
-    const rng = createRng(9);
+  it('VIPs are rare (around 4%) and always one of the named VIPs', () => {
+    const roster = new Roster(createRng(9), names, []);
     let vips = 0;
     for (let i = 0; i < 5000; i++) {
-      const p = pickPassenger(rng, names);
+      const p = roster.pick();
       if (p.kind === 'vip') {
         vips++;
         expect(VIP_NAMES).toContain(p.name);

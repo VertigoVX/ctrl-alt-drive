@@ -38,7 +38,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['14th St', '23rd St', '34th St', '42nd St', '57th St', '72nd St', '86th St', '96th St', '110th St', '125th St'],
     colNames: ['1st Ave', '2nd Ave', '3rd Ave', 'Lexington Ave', 'Park Ave', 'Madison Ave', '5th Ave', '6th Ave', '7th Ave', 'Broadway', '8th Ave'],
-    passengers: ['Tony', 'Keisha', 'Marisol', 'Jake', 'Dev', 'Rosa', 'Eli', 'Nia', 'Sal', 'Brianna'],
+    passengers: [
+      'Tony', 'Keisha', 'Marisol', 'Jake', 'Dev', 'Rosa', 'Eli', 'Nia', 'Sal', 'Brianna', 'Vinnie',
+      'Deshawn', 'Yolanda', 'Miguel', 'Esperanza', 'Moshe', 'Rivka', 'Anika', 'Tyrese', 'Carmen',
+      'Frankie', 'Gianna', 'Abdul', 'Fatou', 'Jamal', 'Maurice', 'Rocco', 'Dominic', 'Lupe', 'Hector',
+      'Irene', 'Sasha', 'Jerome', 'Dolores', 'Lenny', 'Alejandra', 'Kareem', 'Bernadette', 'Stanley',
+    ],
   },
   {
     id: 'london', name: 'London', country: 'UK', tagline: 'Winding streets either side of the Thames. Mind the black cab.',
@@ -50,7 +55,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Oxford St', 'Regent St', 'Baker St', 'Fleet St', 'Strand', 'Piccadilly', 'Whitehall', 'Kingsway', 'Holborn', 'Pall Mall'],
     colNames: ['Park Ln', 'Charing Cross Rd', 'Tottenham Ct Rd', 'Gower St', 'Bond St', 'Shaftesbury Ave', 'Drury Ln', 'Aldwych', 'Marylebone Rd', 'Euston Rd'],
-    passengers: ['Olivia', 'Harry', 'Amelia', 'Raj', 'Chloe', 'Kofi', 'Imogen', 'Alfie', 'Zara', 'Callum'],
+    passengers: [
+      'Olivia', 'Harry', 'Amelia', 'Raj', 'Chloe', 'Kofi', 'Imogen', 'Alfie', 'Zara', 'Callum', 'Poppy',
+      'Oliver', 'Archie', 'Freddie', 'Edith', 'Rupert', 'Hamza', 'Aisha', 'Bethany', 'Connor', 'Dilys',
+      'Ewan', 'Fiona', 'Gareth', 'Hattie', 'Ivor', 'Jasmine', 'Kieran', 'Lottie', 'Mohammed', 'Nigel',
+      'Ophelia', 'Pippa', 'Rhys', 'Saoirse', 'Tobias', 'Una', 'Winston',
+    ],
   },
   {
     id: 'hong-kong', name: 'Hong Kong', country: 'China', tagline: 'Dense towers packed around the harbour. Red taxis everywhere.',
@@ -62,7 +72,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Nathan Rd', 'Des Voeux Rd', "Queen's Rd", 'Hennessy Rd', 'Lockhart Rd', 'Canton Rd', 'Gloucester Rd', 'Jaffe Rd'],
     colNames: ['Pedder St', 'Wyndham St', 'Peel St', 'Aberdeen St', 'Graham St', 'Jubilee St', 'Ice House St', 'Arsenal St'],
-    passengers: ['Ka-ming', 'Wing', 'Mei-ling', 'Chun', 'Hoi-yan', 'Kenneth', 'Ying', 'Siu-fung', 'Cheuk', 'Man-yee'],
+    passengers: [
+      'Ka-ming', 'Wing', 'Mei-ling', 'Chun', 'Hoi-yan', 'Kenneth', 'Ying', 'Siu-fung', 'Cheuk',
+      'Man-yee', 'Wai-lun', 'Sze-man', 'Ho-yin', 'Tsz-ching', 'Kwok', 'Lai-ping', 'Chi-wai', 'Pui-yee',
+      'Kin-lok', 'Mei-yee', 'Hing', 'Ngai', 'Yuk-lan', 'Tak', 'Fung', 'Oi-ling', 'Ka-wai', 'Lok',
+      'Wing-sze', 'Shun', 'Bonnie', 'Vincent', 'Cherry', 'Winnie', 'Anson', 'Karen',
+    ],
   },
   {
     id: 'cape-town', name: 'Cape Town', country: 'South Africa', tagline: 'Between the mountain and the sea. You drive the minibus taxi.',
@@ -74,7 +89,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Long St', 'Bree St', 'Loop St', 'Adderley St', 'Strand St', 'Wale St', 'Buitengracht St', 'Kloof St'],
     colNames: ['Darling St', 'Castle St', 'Shortmarket St', 'Hout St', 'Riebeek St', 'Orange St', 'Buitenkant St', 'Roeland St'],
-    passengers: ['Thabo', 'Aisha', 'Pieter', 'Naledi', 'Riaan', 'Zintle', 'Yusuf', 'Lindiwe', 'Jarryd', 'Nomsa'],
+    passengers: [
+      'Thabo', 'Aisha', 'Pieter', 'Naledi', 'Riaan', 'Zintle', 'Yusuf', 'Lindiwe', 'Jarryd', 'Nomsa',
+      'Andile', 'Bheki', 'Cassiem', 'Chantelle', 'Dewald', 'Elsabe', 'Faghmeeda', 'Gerhard', 'Hlumelo',
+      'Ilse', 'Jaco', 'Kobus', 'Lunga', 'Mandla', 'Nazeem', 'Pumla', 'Quinton', 'Rashaad', 'Sandile',
+      'Tasneem', 'Unathi', 'Vusi', 'Waldo', 'Xolani', 'Yolandi', 'Zinhle', 'Bradley', 'Charlene',
+    ],
   },
   {
     id: 'sydney', name: 'Sydney', country: 'Australia', tagline: 'Harbour city. Sails on the water, parks on the shore.',
@@ -86,7 +106,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['George St', 'Pitt St', 'Macquarie St', 'Oxford St', 'Elizabeth St', 'Kent St', 'Sussex St', 'Liverpool St'],
     colNames: ['Bridge St', 'Hunter St', 'King St', 'Market St', 'Park St', 'Bathurst St', 'Goulburn St', 'Castlereagh St'],
-    passengers: ['Liam', 'Charlotte', 'Jack', 'Mia', 'Minh', 'Harper', 'Kai', 'Ruby', 'Lachlan', 'Isla'],
+    passengers: [
+      'Liam', 'Charlotte', 'Jack', 'Mia', 'Minh', 'Harper', 'Kai', 'Ruby', 'Lachlan', 'Isla', 'Matilda',
+      'Toby', 'Tahlia', 'Ashton', 'Bronte', 'Cooper', 'Darcy', 'Evie', 'Flynn', 'Georgia', 'Hamish',
+      'Indigo', 'Jarrah', 'Kirra', 'Mackenzie', 'Olive', 'Phoebe', 'Rory', 'Sienna', 'Thomas', 'Violet',
+      'Wyatt', 'Xanthe', 'Zoe', 'Declan', 'Eliza', 'Ryan', 'Tamsin',
+    ],
   },
   {
     id: 'singapore', name: 'Singapore', country: 'Singapore', tagline: 'Garden city on the bay. Blue taxis and a lion by the water.',
@@ -98,7 +123,13 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Orchard Rd', 'Bras Basah Rd', 'Bencoolen St', 'Victoria St', 'North Bridge Rd', 'Beach Rd', 'Raffles Blvd', 'Collyer Quay'],
     colNames: ['Stamford Rd', 'Hill St', 'Coleman St', 'Bukit Timah Rd', 'Serangoon Rd', 'Clemenceau Ave', 'Anson Rd', 'Cecil St'],
-    passengers: ['Wei Ling', 'Arif', 'Priyanka', 'Jun Jie', 'Siti', 'Darren', 'Mei Xin', 'Ravi', 'Hui Min', 'Farhan'],
+    passengers: [
+      'Wei Ling', 'Arif', 'Priyanka', 'Jun Jie', 'Siti', 'Darren', 'Mei Xin', 'Ravi', 'Hui Min',
+      'Farhan', 'Jia Hao', 'Xin Yi', 'Zhi Wei', 'Shu Fen', 'Kai Wen', 'Li Ting', 'Rahim', 'Nurul',
+      'Aaliyah', 'Suresh', 'Kavitha', 'Murugan', 'Devi', 'Hafiz', 'Izzat', 'Kumar', 'Lakshmi', 'Melvin',
+      'Natasha', 'Pei Shan', 'Rajesh', 'Sharifah', 'Tze Yong', 'Yong Sheng', 'Zhen Hao', 'Alvin',
+      'Bernice', 'Clement',
+    ],
   },
   {
     id: 'paris', name: 'Paris', country: 'France', tagline: 'Boulevards along the Seine, with the tower always in view.',
@@ -110,7 +141,13 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Rue de Rivoli', 'Bd Haussmann', 'Rue du Bac', 'Av. Montaigne', 'Bd Saint-Germain', 'Rue Saint-Honoré', "Av. de l'Opéra", 'Rue de la Paix'],
     colNames: ['Champs-Élysées', 'Bd Raspail', 'Rue de Rennes', 'Av. Foch', 'Rue Royale', 'Bd Voltaire', 'Av. Kléber', 'Rue La Fayette'],
-    passengers: ['Camille', 'Louis', 'Inès', 'Hugo', 'Léa', 'Mamadou', 'Chloé', 'Théo', 'Yasmine', 'Jules'],
+    passengers: [
+      'Camille', 'Louis', 'Inès', 'Hugo', 'Léa', 'Mamadou', 'Chloé', 'Théo', 'Yasmine', 'Jules',
+      'Amélie', 'Baptiste', 'Clémence', 'Dominique', 'Étienne', 'Florence', 'Gaspard', 'Héloïse',
+      'Isaure', 'Julien', 'Laurent', 'Margaux', 'Nicolas', 'Océane', 'Pascal', 'Quentin', 'Raphaël',
+      'Solène', 'Thibault', 'Valérie', 'Xavier', 'Yvette', 'Zoé', 'Aurélien', 'Brigitte', 'Cédric',
+      'Delphine', 'Fabrice',
+    ],
   },
   {
     id: 'tokyo', name: 'Tokyo', country: 'Japan', tagline: 'Neon, the world’s busiest crossing, and robotaxis with a JDM streak.',
@@ -122,7 +159,12 @@ export const CITIES: CityDef[] = [
     ],
     rowNames: ['Meiji-dōri', 'Yasukuni-dōri', 'Aoyama-dōri', 'Omotesandō', 'Kōshū-kaidō', 'Sotobori-dōri', 'Harumi-dōri', 'Chūō-dōri'],
     colNames: ['Center Gai', 'Dōgenzaka', 'Kōen-dōri', 'Takeshita-dōri', 'Kabukichō', 'Shōwa-dōri', 'Hibiya-dōri', 'Ginza-dōri'],
-    passengers: ['Haruto', 'Yui', 'Sota', 'Hina', 'Ren', 'Sakura', 'Kaito', 'Aoi', 'Yuto', 'Mio'],
+    passengers: [
+      'Haruto', 'Yui', 'Sota', 'Hina', 'Ren', 'Sakura', 'Kaito', 'Aoi', 'Yuto', 'Mio', 'Akira', 'Daiki',
+      'Eri', 'Fumiko', 'Goro', 'Haruka', 'Itsuki', 'Jun', 'Kazuki', 'Kenta', 'Madoka', 'Naomi', 'Osamu',
+      'Rika', 'Shota', 'Tomoko', 'Ume', 'Yamato', 'Yoko', 'Satoshi', 'Riko', 'Taro', 'Miyu', 'Ryota',
+      'Chihiro', 'Hideo', 'Natsuki', 'Takumi',
+    ],
   },
 ];
 

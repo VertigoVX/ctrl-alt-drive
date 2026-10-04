@@ -7,7 +7,7 @@ import { dist, type Vec } from './math';
 import { distanceField, findPath } from './pathfinding';
 import { generateCityMap, type CityDef, type CityId } from './cities';
 import { MODES, type ModeId, type ModeRules } from './modes';
-import { PASSENGER_KINDS, pickPassenger, type PassengerKind } from './passengers';
+import { PASSENGER_KINDS, Roster, type PassengerKind } from './passengers';
 import { createRng, type Rng } from './rng';
 import { createVehicle, DEFAULT_HANDLING, updateVehicle, type DriveInput, type Vehicle } from './vehicle';
 
@@ -120,15 +120,9 @@ export interface GameState {
   powerupTimer: number;
   routeTimer: number;
   nextAvId: number;
-  passengerNames: readonly string[];
+  roster: Roster;
 }
 
-export const DEFAULT_PASSENGERS = [
-  'Maya', 'Theo', 'Priya', 'Jonah', 'Amara', 'Luis', 'Nadia', 'Kenji', 'Zanele', 'Oscar',
-  'Ines', 'Tariq', 'Freya', 'Sipho', 'Mei', 'Rafael', 'Lerato', 'Hugo', 'Ayla', 'Dmitri',
-  'Chidi', 'Sofia', 'Arjun', 'Leila', 'Mateo', 'Hana', 'Kwame', 'Elif', 'Noah', 'Yuki',
-  'Thandi', 'Omar', 'Clara', 'Ravi', 'Ingrid', 'Diego', 'Aiko', 'Femi', 'Lucia', 'Bongani',
-];
 
 const addressOf = (map: CityMap, t: Point) => `${100 + ((t.x * 37 + t.y * 53) % 880)} ${streetNameAt(map, t.x, t.y)}`;
 
@@ -147,7 +141,7 @@ function farthest(map: CityMap, field: Int32Array, fraction: number): Point[] {
 
 function newJob(g: GameState): Job {
   const { map, rng } = g;
-  const passenger = pickPassenger(rng, g.passengerNames);
+  const passenger = g.roster.pick();
   const from = worldToTile(map, g.taxi.pos);
   const f1 = distanceField(map, from);
   let pickups = tilesWithin(map, f1, 8, 22);
@@ -204,6 +198,7 @@ export interface GameOptions {
   seed: number;
   mode?: ModeId;
   city?: CityDef;
+  /** Local names to mix with the global pool (defaults to the city's own). */
   passengerNames?: readonly string[];
   width?: number;
   height?: number;
@@ -224,7 +219,7 @@ export function createGame(opts: GameOptions): GameState {
   const rules = MODES[opts.mode ?? 'normal'];
   const g: GameState = {
     seed: opts.seed, city: opts.city?.id ?? null, mode: rules.id, rules, health: 100, damageCooldown: 0,
-    passengerNames: opts.passengerNames ?? opts.city?.passengers ?? DEFAULT_PASSENGERS,
+    roster: new Roster(rng, opts.passengerNames ?? opts.city?.passengers ?? []),
     map, rng, taxi, avs: [], route: [], powerups: [],
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,

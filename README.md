@@ -21,7 +21,7 @@ A top-down chase game in the spirit of Pac-Man, dressed as a navigation app. Pic
 | Cycle map style | <kbd>T</kbd> |
 | Sound | <kbd>M</kbd> |
 
-Steering has one-tap presets (Gentle, Standard, Sharp) on the title screen, and a fine-grained slider in **Settings**, which is also reachable mid-shift from the gear button.
+Steering defaults to 125%, which playtesting found to be the sweet spot (still 25% gentler than the original, twitchier tuning). It has one-tap presets (Gentle 100%, Standard 125%, Sharp 150%) on the title screen, and a fine-grained slider in **Settings**, which is also reachable mid-shift from the gear button.
 
 - **Fares.** Pick up at the green pin, drop off at the red one. The meter covers the whole trip, and whatever time is left when you arrive is paid as a bonus. Let it run out and the passenger calls a robotaxi instead.
 - **The fleet.** Self-driving cars cruise with their lidar sweeping ahead. The moment one sees you, its headlights flash on and it gives chase. Break its line of sight (buildings block it; water and parks don't) and it searches where it last saw you before giving up.
@@ -30,7 +30,7 @@ Steering has one-tap presets (Gentle, Standard, Sharp) on the title screen, and 
 - **Levels.** Every two fares, more cars join the fleet and they get faster.
 - **Modes.** *Normal* is three cabs, and crashes only dent your pride (and your tips). *Hard* is two cabs: wreck one and it's gone, the fleet is faster, and it pays 1.5×. *Extreme* is two cabs with heavier crash damage that carries over when you're caught, and pays 2×.
 - **Cab condition.** Real crashes (not kerb scrapes) dent the cab. Finish a fare in mint condition for a chance of a tip, or a perk dropped nearby. A wrench key on the road repairs damage.
-- **Passengers.** Some are in a hurry (tight meter, better pay), some are sightseeing (relaxed meter), and business travellers tip well. Very rarely a VIP flags you down, shown by a gold pin: Shingai, Mark, Tiago or Denisha. VIPs pay double.
+- **Passengers.** Some are in a hurry (tight meter, better pay), some are sightseeing (relaxed meter), and business travellers tip well. Very rarely a VIP flags you down, shown by a gold pin: Shingai, Mark, Tiago, Denisha, Tsebo, Archal, Jordan or Duncan. VIPs pay double. Over 500 names are in rotation, shuffled like a deck of cards so you won't meet the same one again for at least ten passengers.
 - **The garage.** Every fare you complete is banked in your wallet, even if the shift ends badly. Spend it on paint jobs, roof lights, horns and map styles (Vintage, Blueprint, Neon Noir). Everything in the garage is cosmetic: nothing you buy makes the game easier. Your wallet and garage are saved in your browser.
 
 ### Cities
@@ -68,7 +68,7 @@ Requires Node 20 or newer. Add `?debug` to the URL to expose the live game state
 
 ### Built test-first
 
-All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 218 tests at about 98% line coverage.
+All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 283 tests at about 98% line coverage.
 
 What makes that practical is a hard split. Everything that decides *what happens* lives in `src/core` as pure, deterministic TypeScript with no DOM access. Randomness comes from a seeded RNG, so a city, a spawn, or an AV's patrol can be reproduced exactly in a test. The renderer and HUD only read game state and draw it.
 
@@ -103,6 +103,8 @@ scripts/balance.ts    difficulty probe
 **What you see is what they see.** Headlight cones are drawn from the same ray-marched line of sight the AI uses. A beam cut off by a building means the car genuinely can't see past it.
 
 **Tuned with a bot.** `npm run balance` plays every mode across the cities with a bot that follows the route, brakes for corners and ignores the fleet. On Normal it averages about two and a half fares before losing all three cabs; Hard and Extreme are progressively harsher. Raw driving isn't enough; you have to evade. The same probe set the crash-damage threshold: measuring every wall contact showed that impacts below 90 are almost all kerb scrapes while cornering, so only real crashes dent the cab.
+
+**Names come from shuffled decks, not dice.** Picking a random name each time makes repeats feel common even from a long list (the old game, which only used a city's ten local names, felt like it had four). Each pool is now a shuffled deck, dealt without replacement, and a reshuffle keeps the first few cards clear of whatever was just dealt. A test asserts a name never returns within ten draws, and that 50 fares in any city contain no repeats. VIP names are kept out of every regular pool so that a VIP name always means a VIP.
 
 **The garage can't be pay-to-win, by construction.** Shop items carry only an id, a name, a price and a blurb. How each one looks or sounds lives in the render and audio layers, and a test fails if anyone adds a gameplay field to the catalogue. Saves are parsed defensively too: a corrupted or hand-edited save falls back to safe defaults instead of crashing or equipping things you don't own.
 
