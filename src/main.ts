@@ -74,6 +74,17 @@ music.enabled = settings.music;
 const urlCity = new URLSearchParams(location.search).get('city');
 if (urlCity && CITIES.some((c) => c.id === urlCity)) settings.city = cityById(urlCity).id;
 const freshSeed = () => Math.floor(Math.random() * 900000) + 100000;
+
+function getDailySeed(): number {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
 const currentCity = (): CityDef => cityById(settings.city);
 const newGame = () => {
   const g = createGame({ seed: freshSeed(), city: currentCity(), mode: settings.mode });
@@ -233,6 +244,23 @@ function resetAttract() {
   cam.y = game.taxi.pos.y;
 }
 
+function startDailyChallenge() {
+  sfx.unlock();
+  music.unlock();
+  const seed = getDailySeed();
+  game = createGame({ seed, city: currentCity(), mode: settings.mode });
+  game.steeringSensitivity = settings.sensitivity;
+  game.isDaily = true;
+  shiftTips = 0;
+  cam.x = game.taxi.pos.x;
+  cam.y = game.taxi.pos.y;
+  lastCount = -1;
+  shiftStartCash = profile.cash;
+  $('toasts').innerHTML = '';
+  keys.clear();
+  setMode('playing');
+}
+
 function startShift() {
   sfx.unlock();
   music.unlock();
@@ -288,6 +316,14 @@ function endShift() {
         ? 'The fleet got you before your first fare.'
         : `You got ${game.fares} ${game.fares === 1 ? 'fare' : 'fares'} home before the fleet caught up.`;
   $('overBest').textContent = game.score >= best && game.score > 0 ? 'New best shift.' : `Best shift: ${money(best)}`;
+  
+  if (game.isDaily) {
+    $('dailyResult').hidden = false;
+    $('dailyResultText').textContent = `Daily Challenge: ${game.score} pts, ${game.fares} fares in ${currentCity().name}. Seed: ${game.seed}`;
+  } else {
+    $('dailyResult').hidden = true;
+  }
+
   // Nudge towards the garage when this shift put something new within reach.
   const newlyAffordable = CATALOG.filter(
     (i) => !profile.owned.includes(i.id) && i.price <= profile.cash && i.price > shiftStartCash,
@@ -358,17 +394,25 @@ function handle(events: GameEvent[]) {
     switch (e.type) {
       case 'go':
         sfx.go();
-        toast(`${MODES[game.mode].name} shift in ${currentCity().name}. Pick up ${game.job.passenger}`, t.pickup);
+        if (game.fares === 0) {
+          toast("First fare: Follow the green route. Drag the stick early to queue turns!", t.pickup);
+        } else {
+          toast(`${MODES[game.mode].name} shift in ${currentCity().name}. Pick up ${game.job.passenger}`, t.pickup);
+        }
         break;
       case 'pickup':
         sfx.pickup();
         renderer.ring(game.taxi.pos, t.pickup);
-        toast(
-          game.job.kind === 'vip' ? `VIP ${e.passenger} is in the cab. Double fare`
-            : game.job.kind === 'rush' ? `${e.passenger} is in a hurry. Step on it`
-            : `${e.passenger} is in the cab`,
-          game.job.kind === 'vip' ? '#E5A50A' : t.pickup,
-        );
+        if (game.fares === 0) {
+          toast("Great! Now follow the blue route to the drop-off. Watch the meter!", t.pickup);
+        } else {
+          toast(
+            game.job.kind === 'vip' ? `VIP ${e.passenger} is in the cab. Double fare`
+              : game.job.kind === 'rush' ? `${e.passenger} is in a hurry. Step on it`
+              : `${e.passenger} is in the cab`,
+            game.job.kind === 'vip' ? '#E5A50A' : t.pickup,
+          );
+        }
         break;
       case 'dropoff':
         sfx.dropoff();
@@ -653,6 +697,15 @@ function currentInput(): DriveInput {
 }
 
 $('startButton').addEventListener('click', () => startShift());
+$('dailyButton').addEventListener('click', () => startDailyChallenge());
+$('copyDailyButton').addEventListener('click', () => {
+  const text = `🚕 Ctrl+Alt+Drive Daily Challenge!\nScore: ${game.score} pts | Fares: ${game.fares}\nCity: ${currentCity().name} | Seed: ${game.seed}\nCan you beat my shift?`;
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Copied to clipboard!', '#30D158');
+  }).catch(() => {
+    toast('Failed to copy', 'var(--red)');
+  });
+});
 $('cityButton').addEventListener('click', () => openOverlay('cities'));
 $('cityDone').addEventListener('click', () => setMode(returnMode));
 $('gearButton').addEventListener('click', () => {

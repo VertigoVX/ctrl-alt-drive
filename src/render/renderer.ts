@@ -55,6 +55,9 @@ const PIXEL_BUDGET = 7_000_000;
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
+  private cachedWidth = 0;
+  private cachedHeight = 0;
+  private landmarkWidths = new Map<string, number>();
   private labels: Label[] = [];
   private dashes: Dash[] = [];
   private mapRef: CityMap | null = null;
@@ -70,6 +73,17 @@ export class Renderer {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D is not supported in this browser');
     this.ctx = ctx;
+    
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        this.cachedWidth = entry.contentRect.width;
+        this.cachedHeight = entry.contentRect.height;
+      }
+    });
+    ro.observe(canvas);
+    
+    this.cachedWidth = canvas.clientWidth;
+    this.cachedHeight = canvas.clientHeight;
   }
 
   /**
@@ -78,8 +92,8 @@ export class Renderer {
    * mobile browser toolbars sliding in and out can never leave the canvas stretched.
    */
   syncSize() {
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
+    const w = this.cachedWidth || this.canvas.clientWidth;
+    const h = this.cachedHeight || this.canvas.clientHeight;
     const want = Math.min(window.devicePixelRatio || 1, 3);
     const dpr = Math.min(want, Math.sqrt(PIXEL_BUDGET / Math.max(1, w * h)));
     if (w === this.width && h === this.height && dpr === this.dpr) return;
@@ -301,6 +315,14 @@ export class Renderer {
     return visible;
   }
 
+  private getLandmarkWidth(ctx: CanvasRenderingContext2D, name: string): number {
+    if (!this.landmarkWidths.has(name)) {
+      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif';
+      this.landmarkWidths.set(name, ctx.measureText(name).width);
+    }
+    return this.landmarkWidths.get(name)!;
+  }
+
   private drawLandmarkNames(map: CityMap, t: MapTheme, cam: Camera, names: Record<string, string>) {
     if (cam.zoom < 0.4) return;
     const { ctx } = this;
@@ -313,7 +335,8 @@ export class Renderer {
       if (!name) continue;
       const x = (l.x + l.w / 2) * map.tileSize;
       const y = (l.y + l.h) * map.tileSize - (l.overlay ? -14 / cam.zoom : 12 / cam.zoom);
-      const w = ctx.measureText(name).width + 12 / cam.zoom;
+      const baseWidth = this.getLandmarkWidth(ctx, name);
+      const w = (baseWidth + 12) / cam.zoom;
       ctx.fillStyle = t.labelHalo;
       this.roundRect(x - w / 2, y - 9 / cam.zoom, w, 18 / cam.zoom, 9 / cam.zoom);
       ctx.fill();

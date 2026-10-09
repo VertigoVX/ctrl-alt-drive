@@ -113,6 +113,7 @@
         </div>
 
         <button class="primary" id="startButton">Start shift</button>
+        <button class="secondary" id="dailyButton" style="margin-top: 8px;">📅 Daily Challenge</button>
         <div class="button-row">
           <button class="secondary" id="garageButton">Garage <span class="wallet-inline" id="titleWallet">$0</span></button>
           <button class="secondary" id="settingsButton">Settings</button>
@@ -165,6 +166,11 @@
         </dl>
         <div class="wallet-row"><span>Wallet</span><strong id="overWallet">$0</strong></div>
         <p class="best" id="overBest"></p>
+        <div id="dailyResult" hidden class="daily-result" style="margin-top: 16px; padding: 12px; background: var(--surface); border-radius: 8px; text-align: center;">
+          <p class="lede" style="margin-bottom: 8px;">Daily Challenge Complete!</p>
+          <p id="dailyResultText" class="seed" style="margin-bottom: 12px;"></p>
+          <button class="secondary" id="copyDailyButton">📋 Copy Result</button>
+        </div>
         <p class="nudge" id="overNudge" hidden></p>
         <button class="primary" id="againButton">Drive again</button>
         <div class="button-row">

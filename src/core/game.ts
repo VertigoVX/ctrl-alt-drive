@@ -89,6 +89,8 @@ export type GameEvent =
 
 export interface GameState {
   seed: number;
+  /** True if this run is the daily challenge. */
+  isDaily?: boolean;
   /** The named city being played, if any. */
   city: CityId | null;
   mode: ModeId;
@@ -263,9 +265,32 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   g.invulnerable = Math.max(0, g.invulnerable - dt);
   g.boostTime = Math.max(0, g.boostTime - dt);
 
+  // Turn assist: mobile players often overshoot or undershoot junctions. If they are close to
+  // a route turn and provide any steer input, we help them make the turn cleanly.
+  let adjustedInput = { ...input };
+  if (g.route.length >= 3 && input.steer !== 0) {
+    const turn = nextTurn(g.route);
+    if (turn.kind !== 'arrive' && turn.tilesAway <= 3) {
+      const taxiTile = worldToTile(g.map, g.taxi.pos);
+      const distToTurn = Math.abs(taxiTile.x - turn.at.x) + Math.abs(taxiTile.y - turn.at.y);
+      if (distToTurn <= 3) {
+        const turnIndex = g.route.findIndex(p => p.x === turn.at.x && p.y === turn.at.y);
+        if (turnIndex !== -1 && turnIndex < g.route.length - 1) {
+          const currentPt = g.route[turnIndex];
+          const nextPt = g.route[turnIndex + 1];
+          const targetHeading = Math.atan2(nextPt.y - currentPt.y, nextPt.x - currentPt.x);
+          const diff = angleDiff(g.taxi.heading, targetHeading);
+          if (Math.abs(diff) > 0.15) {
+            adjustedInput.steer = Math.sign(diff);
+          }
+        }
+      }
+    }
+  }
+
   // Taxi.
   const handling = { ...DEFAULT_HANDLING, turnRate: DEFAULT_HANDLING.turnRate * g.steeringSensitivity };
-  updateVehicle(g.taxi, input, dt, g.map, g.boostTime > 0 ? GAME_RULES.surgeBoost : 1, handling);
+  updateVehicle(g.taxi, adjustedInput, dt, g.map, g.boostTime > 0 ? GAME_RULES.surgeBoost : 1, handling);
 
   // Crashes dent the cab.
   g.damageCooldown = Math.max(0, g.damageCooldown - dt);
