@@ -3,8 +3,8 @@ import {
   drivableNeighbours, generateCity, isDrivable, roadTiles, streetNameAt, tileAt, tileCenter, worldToTile,
   type CityMap, type Point,
 } from './city';
-import { dist, type Vec } from './math';
-import { distanceField, findPath } from './pathfinding';
+import { angleDiff, dist, type Vec } from './math';
+import { distanceField, findPath, nextTurn} from './pathfinding';
 import { generateCityMap, type CityDef, type CityId } from './cities';
 import { MODES, type ModeId, type ModeRules } from './modes';
 import { PASSENGER_KINDS, Roster, type PassengerKind } from './passengers';
