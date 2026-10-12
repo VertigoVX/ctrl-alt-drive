@@ -7,7 +7,7 @@ import { dist, type Vec } from './math';
 import { distanceField, findPath } from './pathfinding';
 import { generateCityMap, type CityDef, type CityId } from './cities';
 import { MODES, type ModeId, type ModeRules } from './modes';
-import { PASSENGER_KINDS, Roster, type PassengerKind } from './passengers';
+import { PASSENGER_KINDS, Roster, TUTORIAL_PASSENGER, type PassengerKind } from './passengers';
 import { createRng, type Rng } from './rng';
 import { createVehicle, DEFAULT_HANDLING, updateVehicle, type DriveInput, type Vehicle } from './vehicle';
 
@@ -75,6 +75,8 @@ export type GameEvent =
   | { type: 'dropoff'; fare: number; bonus: number }
   | { type: 'fareExpired'; passenger: string }
   | { type: 'caught' }
+  /** Tutorial only: a robotaxi reached the cab, which in a real shift would cost a cab. */
+  | { type: 'tutorialCaught' }
   | { type: 'damage'; amount: number }
   | { type: 'wrecked' }
   | { type: 'tip'; amount: number; passenger: string }
@@ -89,6 +91,7 @@ export type GameEvent =
 
 export interface GameState {
   seed: number;
+  tutorial: boolean;
   /** The named city being played, if any. */
   city: CityId | null;
   mode: ModeId;
@@ -141,14 +144,16 @@ function farthest(map: CityMap, field: Int32Array, fraction: number): Point[] {
 
 function newJob(g: GameState): Job {
   const { map, rng } = g;
-  const passenger = g.roster.pick();
+  // The tutorial's first fare is an ordinary passenger, close by, on a short trip.
+  const first = g.tutorial && g.fares === 0;
+  const passenger = first ? { name: TUTORIAL_PASSENGER, kind: 'regular' as const } : g.roster.pick();
   const from = worldToTile(map, g.taxi.pos);
   const f1 = distanceField(map, from);
-  let pickups = tilesWithin(map, f1, 8, 22);
+  let pickups = first ? tilesWithin(map, f1, 3, 9) : tilesWithin(map, f1, 8, 22);
   if (!pickups.length) pickups = farthest(map, f1, 0.5);
   const pickupTile = rng.pick(pickups);
   const f2 = distanceField(map, pickupTile);
-  let drops = tilesWithin(map, f2, 18, 40);
+  let drops = first ? tilesWithin(map, f2, 10, 18) : tilesWithin(map, f2, 18, 40);
   if (!drops.length) drops = farthest(map, f2, 0.3);
   const dropoffTile = rng.pick(drops);
   const routeTiles = f1[pickupTile.y * map.width + pickupTile.x] + f2[dropoffTile.y * map.width + dropoffTile.x];
@@ -198,6 +203,8 @@ export interface GameOptions {
   seed: number;
   mode?: ModeId;
   city?: CityDef;
+  /** The guided first fare: empty roads, a paused meter, a short trip, and no cabs lost. */
+  tutorial?: boolean;
   /** Local names to mix with the global pool (defaults to the city's own). */
   passengerNames?: readonly string[];
   width?: number;
@@ -226,12 +233,12 @@ export function createGame(opts: GameOptions): GameState {
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,
     score: 0, lives: rules.lives, fares: 0, level: 1, escapes: 0, recycled: 0,
-    invulnerable: 0, boostTime: 0, steeringSensitivity: 1,
+    invulnerable: 0, boostTime: 0, steeringSensitivity: 1, tutorial: !!opts.tutorial,
     spawnTimer: GAME_RULES.spawnInterval(1) * rules.spawnScale, powerupTimer: GAME_RULES.powerupInterval, routeTimer: 0,
     nextAvId: 1,
   };
   g.job = newJob(g);
-  for (let i = 0; i < GAME_RULES.initialAvs; i++) spawnAv(g);
+  if (!g.tutorial) for (let i = 0; i < GAME_RULES.initialAvs; i++) spawnAv(g);
   refreshRoute(g);
   // Face the first leg of the route so the shift starts moving towards the passenger.
   const [a, b] = g.route;
@@ -300,7 +307,7 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   }
 
   // Power-ups.
-  g.powerupTimer -= dt;
+  if (!g.tutorial) g.powerupTimer -= dt;
   if (g.powerupTimer <= 0) {
     g.powerupTimer = GAME_RULES.powerupInterval;
     if (g.powerups.length < GAME_RULES.maxPowerups) {
@@ -334,7 +341,15 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
     g.recycled++;
     events.push({ type: 'recycled', points });
   }
-  if (g.invulnerable <= 0 && touching.some((a) => a.state !== 'rebooting')) {
+  if (g.tutorial) {
+    // A lesson, not a loss: the robotaxi that caught you stands down.
+    for (const av of touching.filter((a) => a.state !== 'rebooting')) {
+      av.state = 'rebooting';
+      av.stateTime = 0;
+      av.path = [];
+      events.push({ type: 'tutorialCaught' });
+    }
+  } else if (g.invulnerable <= 0 && touching.some((a) => a.state !== 'rebooting')) {
     events.push({ type: 'caught' });
     // The robotaxi drives off with your passenger, and the cars around you clear out.
     g.avs = g.avs.filter((av) => dist(av.pos, g.taxi.pos) > 6 * g.map.tileSize);
@@ -345,7 +360,7 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
 
   // The fare.
   const job = g.job;
-  job.timeLeft = Math.max(0, job.timeLeft - dt);
+  if (!g.tutorial) job.timeLeft = Math.max(0, job.timeLeft - dt);
   if (job.stage === 'pickup' && dist(g.taxi.pos, job.pickup) < GAME_RULES.pickupRadius) {
     job.stage = 'dropoff';
     events.push({ type: 'pickup', passenger: job.passenger });
@@ -391,7 +406,7 @@ export function updateGame(g: GameState, input: DriveInput, dt: number): GameEve
   }
 
   // Spawner.
-  g.spawnTimer -= dt;
+  if (!g.tutorial) g.spawnTimer -= dt;
   if (g.spawnTimer <= 0) {
     g.spawnTimer = GAME_RULES.spawnInterval(g.level) * g.rules.spawnScale;
     if (g.avs.length < GAME_RULES.maxAvs(g.level) + g.rules.maxAvsBonus && spawnAv(g)) events.push({ type: 'spawn' });

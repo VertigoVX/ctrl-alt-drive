@@ -1141,6 +1141,86 @@ h2 {
   grid-template-columns: 1fr;
 }
 
+/* ---------- Tutorial coach ---------- */
+
+.coach {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(max(14px, env(safe-area-inset-top)) + 86px);
+  width: min(440px, calc(100% - 90px));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--material-strong);
+}
+
+.coach-mark {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+.coach-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.coach-skip {
+  border: 0;
+  background: var(--fill);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  align-self: center;
+}
+
+.coach.changed {
+  /* `translate`, not `transform`, so the entrance never fights the centring transform. */
+  animation: coach-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@media (min-width: 1000px) {
+  .coach {
+    top: max(14px, env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 560px) {
+  .coach {
+    left: 14px;
+    transform: none;
+    width: calc(100% - 82px);
+  }
+}
+
+@keyframes coach-in {
+  from { opacity: 0; translate: 0 -8px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .coach {
+    top: auto;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: calc(50% + 150px);
+    transform: translateX(-50%);
+    width: min(360px, calc(100% - 380px));
+  }
+}
+
+.how-tutorial {
+  margin-top: 4px;
+  text-align: left;
+  padding: 8px 0 0;
+}
+
 /* ---------- Settings notes ---------- */
 
 .setting-note {

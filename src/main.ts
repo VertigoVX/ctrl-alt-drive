@@ -7,6 +7,7 @@ import {
   type DailyChallenge, type DailyResult,
 } from './core/daily';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
+import { createTutorial, placeTutorialRobotaxi, stepTutorial, type Tutorial } from './core/tutorial';
 import { MODES, type ModeId } from './core/modes';
 import { PASSENGER_KINDS } from './core/passengers';
 import { createStickMemory, inputFromKeys, inputFromStick } from './core/input';
@@ -67,7 +68,7 @@ if (!availableThemes(profile).includes(settings.theme)) settings.theme = 'night'
 
 // ---------- game state ----------
 
-type Mode = 'title' | 'playing' | 'paused' | 'over' | 'garage' | 'settings' | 'cities';
+type Mode = 'title' | 'playing' | 'paused' | 'over' | 'garage' | 'settings' | 'cities' | 'tutorialDone';
 let mode: Mode = 'title';
 let returnMode: Mode = 'title';
 const sfx = new Sfx();
@@ -97,6 +98,11 @@ let runLog = createRunLog();
 /** The city being driven: the daily's during a daily run, otherwise the one picked on the title. */
 const activeCity = (): CityDef => (daily ? cityById(daily.city) : currentCity());
 let shiftTips = 0;
+/** Set while the guided first fare is running. */
+let tutorial: Tutorial | null = null;
+const isTouch = window.matchMedia('(pointer: coarse)').matches;
+// Players who already have earnings (from before the tutorial existed) don't get it forced on them.
+let tutorialDone = store.get('cad.tutorial') === 'done' || profile.lifetime > 0 || best > 0;
 const canvas = $<HTMLCanvasElement>('map');
 const renderer = new Renderer(canvas);
 const cam = createCamera(game.taxi.pos);
@@ -179,8 +185,11 @@ function setMode(next: Mode) {
   show('garageScreen', mode === 'garage');
   show('settingsScreen', mode === 'settings');
   show('cityScreen', mode === 'cities');
+  show('tutorialScreen', mode === 'tutorialDone');
+  show('coach', !!tutorial && (mode === 'playing' || mode === 'paused'));
   show('hud', mode === 'playing' || mode === 'paused' || (mode === 'settings' && returnMode === 'paused'));
   if (mode === 'paused') $('resumeButton').focus();
+  if (mode === 'tutorialDone') $('tutorialStart').focus();
   if (mode === 'over') {
     // Keyboard users land on the main action, but the screen opens at the top so the headline
     // (and on a daily, the share card) are what you see first on a phone.
@@ -258,10 +267,18 @@ function resetAttract() {
 
 
 /** Start a run: free play in the chosen city and mode, or today's daily challenge. */
-function startShift(kind: 'free' | 'daily' = 'free') {
+function startShift(kind: 'free' | 'daily' | 'tutorial' = 'free') {
   sfx.unlock();
   music.unlock();
-  if (kind === 'daily') {
+  // A brand-new player's first "Start shift" is the guided first fare.
+  if (kind === 'free' && !tutorialDone) kind = 'tutorial';
+  tutorial = null;
+  if (kind === 'tutorial') {
+    daily = null;
+    game = createGame({ seed: freshSeed(), city: currentCity(), mode: 'normal', tutorial: true });
+    tutorial = createTutorial({ time: 0, touch: isTouch });
+    $('coachText').textContent = tutorial.message;
+  } else if (kind === 'daily') {
     daily = dailyChallenge(new Date());
     game = createGame({ seed: daily.seed, city: cityById(daily.city), mode: daily.mode });
   } else {
@@ -295,6 +312,7 @@ function quitToTitle() {
   $('toasts').innerHTML = '';
   keys.clear();
   daily = null;
+  tutorial = null;
   resetAttract();
   returnMode = 'title';
   setMode('title');
@@ -303,7 +321,19 @@ function quitToTitle() {
 /** Start a fresh run in the same city and mode, straight from the pause menu. */
 function restartShift() {
   recordBest();
-  startShift(daily ? 'daily' : 'free');
+  startShift(tutorial ? 'tutorial' : daily ? 'daily' : 'free');
+}
+
+function finishTutorial() {
+  tutorialDone = true;
+  store.set('cad.tutorial', 'done');
+}
+
+/** Skipping counts as done: the player has chosen to go straight to a real shift. */
+function skipTutorial() {
+  finishTutorial();
+  tutorial = null;
+  startShift('free');
 }
 
 function endShift() {
@@ -443,6 +473,8 @@ $('settingsDone').addEventListener('click', () => setMode(returnMode));
 
 let lastSpottedToast = -10;
 function toast(text: string, color: string) {
+  // During the tutorial the coach card does the talking.
+  if (tutorial) return;
   const box = $('toasts');
   while (box.children.length >= 3) box.firstElementChild?.remove();
   const el = document.createElement('div');
@@ -635,6 +667,7 @@ function updateHud() {
   setText('healthValue', hp >= GAME_RULES.mintCondition ? 'Mint' : hp >= 60 ? 'Dented' : hp >= 30 ? 'Battered' : g.rules.wrecks ? 'Critical' : 'Wrecked');
   setHtml('fareDot', pickup ? ICONS.person : ICONS.flag);
   setText('meterTime', formatClock(job.timeLeft));
+  setText('meterLabel', g.tutorial ? 'meter paused' : 'on the meter');
   const ratio = job.timeLeft / job.timeTotal;
   const meter = $('meterTime');
   meter.classList.toggle('warn', ratio < 0.4 && ratio >= 0.18);
@@ -667,8 +700,14 @@ function updateHud() {
 let insets: Required<Insets> = { top: 0, bottom: 0, left: 0 };
 let insetTimer = 0;
 let panelRects: { el: HTMLElement; rect: ScreenRect }[] = [];
+/** The tutorial coach sits under the banner; keep the cab clear of it too. */
+function coachBottom(): number {
+  const coach = $('coach');
+  return coach.hidden ? 0 : coach.getBoundingClientRect().bottom;
+}
+
 function measureInsets() {
-  const panels = [document.querySelector<HTMLElement>('.sheet')!, $('banner')];
+  const panels = [document.querySelector<HTMLElement>('.sheet')!, $('banner'), $('coach')];
   panelRects = panels.map((el) => ({ el, rect: el.getBoundingClientRect() }));
   if (mode !== 'playing') {
     insets = { top: 0, bottom: 0, left: 0 };
@@ -679,7 +718,7 @@ function measureInsets() {
   const banner = $('banner').getBoundingClientRect();
   insets = landscapePhone.matches
     ? { top: 0, bottom: 0, left: Math.max(sheet.right, banner.right) + 8 }
-    : { top: banner.bottom + 8, bottom: Math.max(0, h - sheet.top) + 8, left: 0 };
+    : { top: Math.max(banner.bottom, coachBottom()) + 8, bottom: Math.max(0, h - sheet.top) + 8, left: 0 };
 }
 
 // ---------- input ----------
@@ -707,6 +746,10 @@ window.addEventListener('keydown', (e) => {
     return startShift(daily ? 'daily' : 'free');
   }
   if (mode === 'over' && e.code === 'Escape') return quitToTitle();
+  if (mode === 'tutorialDone' && !onButton && (e.code === 'Enter' || e.code === 'Space')) {
+    e.preventDefault();
+    return startShift('free');
+  }
   if (e.code === 'KeyP' || e.code === 'Escape') {
     if (mode === 'playing') setMode('paused');
     else if (mode === 'paused') setMode('playing');
@@ -778,6 +821,32 @@ function currentInput(): DriveInput {
 }
 
 $('startButton').addEventListener('click', () => startShift());
+$('coachSkip').addEventListener('click', skipTutorial);
+$('tutorialStart').addEventListener('click', () => startShift('free'));
+$('tutorialMenu').addEventListener('click', quitToTitle);
+$('replayTutorial').addEventListener('click', () => startShift('tutorial'));
+
+function driveTutorial(events: GameEvent[]) {
+  const t = tutorial!;
+  const actions = stepTutorial(t, events, { time: game.time, touch: isTouch });
+  if (actions.spawnRobotaxi) placeTutorialRobotaxi(game);
+  const text = $('coachText');
+  if (text.textContent !== t.message) {
+    text.textContent = t.message;
+    const coach = $('coach');
+    coach.classList.remove('changed');
+    void coach.offsetWidth;
+    coach.classList.add('changed');
+  }
+  if (t.finished) {
+    finishTutorial();
+    tutorial = null;
+    show('coach', false);
+    setTimeout(() => {
+      if (mode === 'playing') setMode('tutorialDone');
+    }, 1200);
+  }
+}
 $('cityButton').addEventListener('click', () => openOverlay('cities'));
 $('cityDone').addEventListener('click', () => setMode(returnMode));
 $('gearButton').addEventListener('click', () => {
@@ -849,6 +918,7 @@ function frame(now: number) {
       const before = { health: game.health, vip: game.job.kind === 'vip' };
       const events = updateGame(game, input, STEP);
       logEvents(runLog, events, before);
+      if (tutorial) driveTutorial(events);
       handle(events);
       acc -= STEP;
     }

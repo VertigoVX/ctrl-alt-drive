@@ -20,6 +20,9 @@ export const PASSENGER_KINDS: Record<PassengerKind, KindRules> = {
   vip: { label: 'VIP', weight: 0.04, fareMultiplier: 2, meterMultiplier: 1, tipBias: 0.2 },
 };
 
+/** The passenger in the guided first fare. */
+export const TUTORIAL_PASSENGER = 'Maya';
+
 export const VIP_NAMES = ['Shingai', 'Mark', 'Tiago', 'Denisha', 'Tsebo', 'Archal', 'Jordan', 'Duncan'];
 
 /**

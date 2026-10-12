@@ -46,6 +46,12 @@
 
       <div class="toasts" id="toasts" aria-live="polite"></div>
 
+      <div class="coach material" id="coach" hidden>
+        <span class="coach-mark" aria-hidden="true">Tutorial</span>
+        <p class="coach-text" id="coachText" role="status" aria-live="polite"></p>
+        <button class="coach-skip" id="coachSkip">Skip</button>
+      </div>
+
       <section class="sheet material" aria-label="Current fare">
         <div class="grabber" aria-hidden="true"></div>
         <div class="fare">
@@ -58,7 +64,7 @@
           </div>
           <div class="meter">
             <div class="meter-time" id="meterTime">0:00</div>
-            <div class="meter-label">on the meter</div>
+            <div class="meter-label" id="meterLabel">on the meter</div>
           </div>
         </div>
         <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
@@ -137,13 +143,24 @@
             <li><kbd class="key key-mini">Del</kbd>Drive over a Del key to reboot the whole fleet, then ram them off the road. A wrench key repairs your cab.</li>
             <li><span class="rule-glyph health-glyph" aria-hidden="true"></span>Keep the cab in mint condition for tips. In Hard and Extreme, a wrecked cab is a lost cab.</li>
           </ul>
+          <button class="text-button how-tutorial" id="replayTutorial">Play the tutorial</button>
         </details>
         <div class="controls-hint hint-desktop">
           <span class="hint-keys"><kbd class="key key-mini">W</kbd><kbd class="key key-mini">A</kbd><kbd class="key key-mini">S</kbd><kbd class="key key-mini">D</kbd></span>
           <span>or arrow keys to drive, <kbd class="key key-mini">P</kbd> to pause.</span>
         </div>
-        <p class="controls-hint hint-touch">Touch and drag anywhere on the map to steer. The taxi drives towards your thumb.</p>
+        <p class="controls-hint hint-touch">Put your thumb down anywhere and point where you want to go. The cab takes the next street that way.</p>
         <p class="best" id="bestLine" hidden></p>
+      </div>
+    </section>
+
+    <!-- After the tutorial -->
+    <section id="tutorialScreen" class="screen screen-center" hidden>
+      <div class="card card-small material" role="dialog" aria-labelledby="tutorialTitle">
+        <h2 id="tutorialTitle">That's the job</h2>
+        <p class="lede">Pick up, drop off, and stay out of the headlights. A real shift runs the meter, the fleet grows as you earn, and you have three cabs.</p>
+        <button class="primary" id="tutorialStart">Start your first shift</button>
+        <button class="secondary" id="tutorialMenu">Main menu</button>
       </div>
     </section>
 
