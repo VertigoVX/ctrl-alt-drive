@@ -151,3 +151,22 @@ describe('turn queueing (Pac-Man style) for the touch stick', () => {
     expect(collidesAt(corner, car.pos, car.radius)).toBe(false);
   });
 });
+
+describe('pointing at a wall', () => {
+  it('drives up to the end of the street and stops short, without touching the wall', () => {
+    // Row 1 ends at column 14; east of it is the boundary wall.
+    const r = drive({ from: { x: 8, y: 1 }, speed: DEFAULT_HANDLING.maxSpeed, stick: EAST, seconds: 3 });
+    expect(r.wallFrames).toBe(0);
+    expect(r.tile.x).toBe(14);
+    const wallX = 15 * map.tileSize;
+    expect(wallX - (r.car.pos.x + r.car.radius)).toBeLessThan(24);
+    expect(Math.abs(r.car.speed)).toBeLessThan(5);
+  });
+
+  it('does not brake early when the street runs on beyond the look-ahead', () => {
+    const long = makeMap(['#'.repeat(40), '#' + '.'.repeat(38) + '#', '#'.repeat(40)]);
+    const car = createVehicle(tileCenter(long, 1, 1), 0);
+    car.speed = 200;
+    expect(assistedStick(EAST, car, long, createAssistMemory(), DEFAULT_HANDLING)).toEqual({ throttle: 1, steer: 0 });
+  });
+});
