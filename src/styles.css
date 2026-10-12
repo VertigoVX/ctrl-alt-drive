@@ -1045,6 +1045,24 @@ h2 {
   75% { transform: translateX(3px); }
 }
 
+/* ---------- Settings notes ---------- */
+
+.setting-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-2);
+  max-width: 30ch;
+}
+
+/* Turn assist only affects the touch stick, so it's only offered on touch screens. */
+@media (pointer: fine) {
+  .setting-touch {
+    display: none;
+  }
+}
+
 /* ---------- Pause / end-of-shift navigation ---------- */
 
 .shortcut-hint {

@@ -6,6 +6,8 @@ import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameS
 import { MODES, type ModeId } from './core/modes';
 import { PASSENGER_KINDS } from './core/passengers';
 import { createStickMemory, inputFromKeys, inputFromStick } from './core/input';
+import { assistedStick, createAssistMemory } from './core/turnAssist';
+import { DEFAULT_HANDLING } from './core/vehicle';
 import { createRng } from './core/rng';
 import { describeSensitivity, parseSettings, STEERING_PRESETS, type Settings, type ThemeId } from './core/settings';
 import { addEarnings, availableThemes, CATALOG, equip, parseProfile, type Profile } from './core/shop';
@@ -348,6 +350,7 @@ function syncSettingsPanel() {
   $('sensitivityValue').textContent = `${pct}%`;
   $('sensitivityWord').textContent = describeSensitivity(settings.sensitivity);
   $('musicSwitch').setAttribute('aria-checked', String(settings.music));
+  $('assistSwitch').setAttribute('aria-checked', String(settings.turnAssist));
   applySound();
 }
 $('sensitivity').addEventListener('input', (e) => {
@@ -357,6 +360,11 @@ $('sensitivity').addEventListener('input', (e) => {
   syncSettingsPanel();
 });
 $('soundSwitch').addEventListener('click', () => setMuted(!sfx.muted));
+$('assistSwitch').addEventListener('click', () => {
+  settings.turnAssist = !settings.turnAssist;
+  saveSettings();
+  syncSettingsPanel();
+});
 $('musicSwitch').addEventListener('click', () => {
   settings.music = !settings.music;
   saveSettings();
@@ -615,6 +623,8 @@ const keys = new Set<string>();
 let stick: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
 // Remembers three-point-turn progress between frames; fresh for every new touch.
 let stickMemory = createStickMemory();
+// Turn queueing state for the touch stick (see core/turnAssist).
+let assistMemory = createAssistMemory();
 
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -664,6 +674,7 @@ window.addEventListener('pointerdown', (e) => {
   if ((e.target as HTMLElement).closest('button, .sheet, .banner')) return;
   stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 };
   stickMemory = createStickMemory();
+  assistMemory = createAssistMemory();
   const el = $('stick');
   el.style.left = `${e.clientX}px`;
   el.style.top = `${e.clientY}px`;
@@ -692,7 +703,12 @@ window.addEventListener('pointercancel', endStick);
 function currentInput(): DriveInput {
   const k = inputFromKeys(keys);
   if (k.throttle || k.steer) return k;
-  if (stick) return inputFromStick(stick, game.taxi, stickMemory);
+  if (stick) {
+    if (!settings.turnAssist) return inputFromStick(stick, game.taxi, stickMemory);
+    const handling = { ...DEFAULT_HANDLING, turnRate: DEFAULT_HANDLING.turnRate * game.steeringSensitivity };
+    return assistedStick(stick, game.taxi, game.map, assistMemory, handling);
+  }
+  assistMemory.queued = null;
   return { throttle: 0, steer: 0 };
 }
 
@@ -808,6 +824,7 @@ function frame(now: number) {
       look: { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: currentCity().cab },
       insets,
       robo: currentCity().robo,
+      queuedTurn: mode === 'playing' && stick ? assistMemory.queued : null,
       landmarkNames: Object.fromEntries(currentCity().landmarks.map((l) => [l.id, l.name])),
     }, dt);
   }

@@ -120,3 +120,17 @@ describe('describing a sensitivity', () => {
     for (const p of STEERING_PRESETS) expect(describeSensitivity(p.value)).toBe(p.label);
   });
 });
+
+describe('turn assist setting', () => {
+  it('is on by default', () => {
+    expect(DEFAULT_SETTINGS.turnAssist).toBe(true);
+    expect(parseSettings(null).turnAssist).toBe(true);
+  });
+  it('remembers being switched off, and ignores junk', () => {
+    expect(parseSettings(JSON.stringify({ turnAssist: false })).turnAssist).toBe(false);
+    expect(parseSettings(JSON.stringify({ turnAssist: 'nope' })).turnAssist).toBe(true);
+  });
+  it('switches on for players upgrading from a save that predates it', () => {
+    expect(parseSettings(JSON.stringify({ sensitivity: 1.3, version: 2 })).turnAssist).toBe(true);
+  });
+});

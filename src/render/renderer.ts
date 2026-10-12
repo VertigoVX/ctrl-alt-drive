@@ -44,6 +44,8 @@ export interface RenderOptions {
   look: TaxiLook;
   /** Screen space covered by HUD panels; edge indicators stay clear of it. */
   insets: { top: number; bottom: number; left: number };
+  /** A turn queued by the touch-stick turn assist, marked on the junction. */
+  queuedTurn?: { x: number; y: number; dir: { x: number; y: number } } | null;
   /** Robotaxi style for this city. */
   robo: 'pod' | 'jdm';
   /** Display names for the city's landmarks, by id. */
@@ -212,6 +214,7 @@ export class Renderer {
     this.drawLandmarkNames(g.map, theme, cam, opts.landmarkNames);
     if (!opts.attract) this.drawRoute(g, theme);
     if (!opts.attract) this.drawPins(g, theme);
+    if (!opts.attract && opts.queuedTurn) this.drawQueuedTurn(g.map, opts.queuedTurn, theme);
     for (const p of g.powerups) this.drawPowerup(p);
     for (const av of g.avs) this.drawVision(g.map, av, theme);
     for (const av of g.avs) this.drawAv(av, theme, opts.robo);
@@ -420,6 +423,35 @@ export class Renderer {
       }
       acc += seg;
     }
+  }
+
+  /** A chevron on the junction where a queued turn will be taken, pointing down the new street. */
+  private drawQueuedTurn(map: CityMap, q: NonNullable<RenderOptions['queuedTurn']>, t: MapTheme) {
+    const { ctx } = this;
+    const c = tileCenter(map, q.x, q.y);
+    const pulse = 0.75 + 0.25 * Math.sin(this.time * 8);
+    ctx.save();
+    ctx.translate(c.x + q.dir.x * 14, c.y + q.dir.y * 14);
+    ctx.rotate(Math.atan2(q.dir.y, q.dir.x));
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.arc(1, 2, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = t.route;
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-4, -6);
+    ctx.lineTo(3, 0);
+    ctx.lineTo(-4, 6);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawPin(pos: Vec, color: string, glyph: 'person' | 'flag') {
