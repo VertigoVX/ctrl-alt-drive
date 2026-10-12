@@ -165,7 +165,7 @@ describe('the share card', () => {
     const text = shareText(c, { score: 1240, fares: 5, escapes: 2, timeline: ['fare', 'vip', 'dented', 'fare', 'lost', 'fare', 'lost', 'lost'] }, 3, 'https://vertigovx.github.io/ctrl-alt-drive/');
     expect(text).toBe([
       'Ctrl+Alt+Drive daily #1',
-      'New York, Normal',
+      `${cityById(c.city).name}, Normal`, // day #1 is a Monday, so Normal
       '$1,240 earned, 5 fares, 2 escapes',
       '🟩⭐🟨🟩🟥🟩🟥🟥',
       'Streak: 3 days',

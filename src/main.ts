@@ -2,6 +2,10 @@ import { updateAutonomous, DEFAULT_AV_TUNING } from './core/autonomous';
 import { createCamera, isObscured, updateCamera, type Insets, type ScreenRect } from './core/camera';
 import { describeDirections, formatClock } from './core/format';
 import { CITIES, cityById, type CityDef } from './core/cities';
+import {
+  createRunLog, currentStreak, dailyChallenge, dayKey, logEvents, parseDailyStats, recordDaily, shareText,
+  type DailyChallenge, type DailyResult,
+} from './core/daily';
 import { createGame, updateGame, spawnAv, GAME_RULES, type GameEvent, type GameState } from './core/game';
 import { MODES, type ModeId } from './core/modes';
 import { PASSENGER_KINDS } from './core/passengers';
@@ -74,19 +78,11 @@ const music = new Music();
 music.enabled = settings.music;
 // ?city=tokyo links straight to a city.
 const urlCity = new URLSearchParams(location.search).get('city');
+// A shared daily result links to ?daily: point the player straight at today's challenge.
+const fromDailyLink = new URLSearchParams(location.search).has('daily');
 if (urlCity && CITIES.some((c) => c.id === urlCity)) settings.city = cityById(urlCity).id;
 const freshSeed = () => Math.floor(Math.random() * 900000) + 100000;
 
-function getDailySeed(): number {
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
 const currentCity = (): CityDef => cityById(settings.city);
 const newGame = () => {
   const g = createGame({ seed: freshSeed(), city: currentCity(), mode: settings.mode });
@@ -94,6 +90,12 @@ const newGame = () => {
   return g;
 };
 let game: GameState = newGame();
+/** Set while the current run is the daily challenge. */
+let daily: DailyChallenge | null = null;
+let dailyStats = parseDailyStats(store.get('cad.daily'));
+let runLog = createRunLog();
+/** The city being driven: the daily's during a daily run, otherwise the one picked on the title. */
+const activeCity = (): CityDef => (daily ? cityById(daily.city) : currentCity());
 let shiftTips = 0;
 const canvas = $<HTMLCanvasElement>('map');
 const renderer = new Renderer(canvas);
@@ -179,7 +181,12 @@ function setMode(next: Mode) {
   show('cityScreen', mode === 'cities');
   show('hud', mode === 'playing' || mode === 'paused' || (mode === 'settings' && returnMode === 'paused'));
   if (mode === 'paused') $('resumeButton').focus();
-  if (mode === 'over') $('againButton').focus();
+  if (mode === 'over') {
+    // Keyboard users land on the main action, but the screen opens at the top so the headline
+    // (and on a daily, the share card) are what you see first on a phone.
+    $('againButton').focus({ preventScroll: true });
+    document.querySelector('#overScreen .card')!.scrollTop = 0;
+  }
   if (mode === 'title') updateTitle();
   if (mode === 'garage') garage.open();
   if (mode === 'settings') syncSettingsPanel();
@@ -197,8 +204,11 @@ function updateTitle() {
   line.hidden = best <= 0;
   line.textContent = `Best shift: ${money(best)}`;
   $('titleWallet').textContent = money(profile.cash);
+  updateDailyRow();
   const city = currentCity();
-  $('cityValue').textContent = `${city.name}, ${city.cabName.toLowerCase()}`;
+  // "London, black cab", but keep proper nouns: "Tokyo, Tokyo taxi".
+  const cab = city.cabName.startsWith(city.name) ? city.cabName : city.cabName[0].toLowerCase() + city.cabName.slice(1);
+  $('cityValue').textContent = `${city.name}, ${cab}`;
   requestAnimationFrame(() => drawMiniTaxi($<HTMLCanvasElement>('cityCab'), { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: city.cab }));
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
     b.setAttribute('aria-checked', String(b.dataset.mode === settings.mode)),
@@ -246,27 +256,19 @@ function resetAttract() {
   cam.y = game.taxi.pos.y;
 }
 
-function startDailyChallenge() {
-  sfx.unlock();
-  music.unlock();
-  const seed = getDailySeed();
-  game = createGame({ seed, city: currentCity(), mode: settings.mode });
-  game.steeringSensitivity = settings.sensitivity;
-  game.isDaily = true;
-  shiftTips = 0;
-  cam.x = game.taxi.pos.x;
-  cam.y = game.taxi.pos.y;
-  lastCount = -1;
-  shiftStartCash = profile.cash;
-  $('toasts').innerHTML = '';
-  keys.clear();
-  setMode('playing');
-}
 
-function startShift() {
+/** Start a run: free play in the chosen city and mode, or today's daily challenge. */
+function startShift(kind: 'free' | 'daily' = 'free') {
   sfx.unlock();
   music.unlock();
-  game = newGame();
+  if (kind === 'daily') {
+    daily = dailyChallenge(new Date());
+    game = createGame({ seed: daily.seed, city: cityById(daily.city), mode: daily.mode });
+  } else {
+    daily = null;
+    game = newGame();
+  }
+  runLog = createRunLog();
   shiftTips = 0;
   game.steeringSensitivity = settings.sensitivity;
   cam.x = game.taxi.pos.x;
@@ -292,6 +294,7 @@ function quitToTitle() {
   show('countdown', false);
   $('toasts').innerHTML = '';
   keys.clear();
+  daily = null;
   resetAttract();
   returnMode = 'title';
   setMode('title');
@@ -300,7 +303,7 @@ function quitToTitle() {
 /** Start a fresh run in the same city and mode, straight from the pause menu. */
 function restartShift() {
   recordBest();
-  startShift();
+  startShift(daily ? 'daily' : 'free');
 }
 
 function endShift() {
@@ -318,13 +321,6 @@ function endShift() {
         ? 'The fleet got you before your first fare.'
         : `You got ${game.fares} ${game.fares === 1 ? 'fare' : 'fares'} home before the fleet caught up.`;
   $('overBest').textContent = game.score >= best && game.score > 0 ? 'New best shift.' : `Best shift: ${money(best)}`;
-  
-  if (game.isDaily) {
-    $('dailyResult').hidden = false;
-    $('dailyResultText').textContent = `Daily Challenge: ${game.score} pts, ${game.fares} fares in ${currentCity().name}. Seed: ${game.seed}`;
-  } else {
-    $('dailyResult').hidden = true;
-  }
 
   // Nudge towards the garage when this shift put something new within reach.
   const newlyAffordable = CATALOG.filter(
@@ -336,10 +332,79 @@ function endShift() {
     newlyAffordable.length === 1
       ? `You can now afford ${newlyAffordable[0].name} in the garage.`
       : `${newlyAffordable.length} new things in the garage are within reach.`;
-  const city = currentCity();
-  $('overSeed').textContent = `${MODES[game.mode].name} mode in ${city.name}. Share it: add ?city=${city.id} to the address.`;
+  const city = activeCity();
+  $('overSeed').textContent = daily
+    ? ''
+    : `${MODES[game.mode].name} mode in ${city.name}. Share it: add ?city=${city.id} to the address.`;
+  showDailyResult();
+  $('againButton').textContent = daily ? 'Try the daily again' : 'Drive again';
   show('countdown', false);
   setMode('over');
+}
+
+// ---------- daily challenge ----------
+
+const shareBase = () => `${location.origin}${location.pathname}`;
+let lastShare = '';
+
+function showDailyResult() {
+  const box = $('dailyResult');
+  box.hidden = !daily;
+  if (!daily) return;
+  const result: DailyResult = { score: game.score, fares: game.fares, escapes: runLog.escapes, timeline: [...runLog.timeline] };
+  const before = dailyStats.days[daily.key]?.best ?? null;
+  dailyStats = recordDaily(dailyStats, daily, result);
+  store.set('cad.daily', JSON.stringify(dailyStats));
+  const streak = currentStreak(dailyStats, daily.key);
+  lastShare = shareText(daily, result, streak, shareBase());
+  $('dailyResultTitle').textContent = `Daily #${daily.number}`;
+  $('dailyResultNote').textContent =
+    !before ? 'Your first run today.' : result.score > before.score ? `New best today, beating ${money(before.score)}.` : `Your best today is ${money(before.score)}.`;
+  $('dailyCard').textContent = lastShare;
+  $('shareDailyButton').hidden = typeof navigator.share !== 'function';
+  $('copyDailyButton').textContent = 'Copy result';
+}
+
+async function copyResult() {
+  try {
+    await navigator.clipboard.writeText(lastShare);
+  } catch {
+    // Older browsers and some webviews: copy from a temporary text area.
+    const area = document.createElement('textarea');
+    area.value = lastShare;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) {
+      $('copyDailyButton').textContent = 'Select the text above to copy';
+      return;
+    }
+  }
+  $('copyDailyButton').textContent = 'Copied';
+}
+
+$('copyDailyButton').addEventListener('click', () => void copyResult());
+$('shareDailyButton').addEventListener('click', () => {
+  navigator.share?.({ text: lastShare }).catch(() => {
+    /* dismissed */
+  });
+});
+$('dailyRow').addEventListener('click', () => startShift('daily'));
+
+function updateDailyRow() {
+  const today = dailyChallenge(new Date());
+  const record = dailyStats.days[today.key];
+  const streak = currentStreak(dailyStats, today.key);
+  $('dailyLabel').textContent = `Daily challenge #${today.number}`;
+  $('dailyValue').textContent = `${cityById(today.city).name} on ${MODES[today.mode].name}`;
+  $('dailyStatus').textContent = record?.best ? `Best ${money(record.best.score)}` : 'Not played yet';
+  const streakEl = $('dailyStreak');
+  streakEl.hidden = streak < 2;
+  streakEl.textContent = `${streak}-day streak`;
 }
 
 // ---------- settings panel ----------
@@ -405,7 +470,7 @@ function handle(events: GameEvent[]) {
         if (game.fares === 0) {
           toast("First fare: Follow the green route. Drag the stick early to queue turns!", t.pickup);
         } else {
-          toast(`${MODES[game.mode].name} shift in ${currentCity().name}. Pick up ${game.job.passenger}`, t.pickup);
+          toast(daily ? `Daily #${daily.number}: ${activeCity().name} on ${MODES[game.mode].name}. Pick up ${game.job.passenger}` : `${MODES[game.mode].name} shift in ${activeCity().name}. Pick up ${game.job.passenger}`, t.pickup);
         }
         break;
       case 'pickup':
@@ -639,7 +704,7 @@ window.addEventListener('keydown', (e) => {
   if (mode === 'paused' && e.code === 'KeyQ') return quitToTitle();
   if (mode === 'over' && !onButton && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
-    return startShift();
+    return startShift(daily ? 'daily' : 'free');
   }
   if (mode === 'over' && e.code === 'Escape') return quitToTitle();
   if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -713,15 +778,6 @@ function currentInput(): DriveInput {
 }
 
 $('startButton').addEventListener('click', () => startShift());
-$('dailyButton').addEventListener('click', () => startDailyChallenge());
-$('copyDailyButton').addEventListener('click', () => {
-  const text = `🚕 Ctrl+Alt+Drive Daily Challenge!\nScore: ${game.score} pts | Fares: ${game.fares}\nCity: ${currentCity().name} | Seed: ${game.seed}\nCan you beat my shift?`;
-  navigator.clipboard.writeText(text).then(() => {
-    toast('Copied to clipboard!', '#30D158');
-  }).catch(() => {
-    toast('Failed to copy', 'var(--red)');
-  });
-});
 $('cityButton').addEventListener('click', () => openOverlay('cities'));
 $('cityDone').addEventListener('click', () => setMode(returnMode));
 $('gearButton').addEventListener('click', () => {
@@ -752,7 +808,7 @@ $('resumeButton').addEventListener('click', () => setMode('playing'));
 $('restartButton').addEventListener('click', restartShift);
 $('menuButton').addEventListener('click', quitToTitle);
 $('overMenuButton').addEventListener('click', quitToTitle);
-$('againButton').addEventListener('click', () => startShift());
+$('againButton').addEventListener('click', () => startShift(daily ? 'daily' : 'free'));
 $('replayButton').addEventListener('click', () => {
   returnMode = 'title';
   setMode('title');
@@ -790,7 +846,10 @@ function frame(now: number) {
     acc += dt;
     input = currentInput();
     while (acc >= STEP) {
-      handle(updateGame(game, input, STEP));
+      const before = { health: game.health, vip: game.job.kind === 'vip' };
+      const events = updateGame(game, input, STEP);
+      logEvents(runLog, events, before);
+      handle(events);
       acc -= STEP;
     }
     updateCamera(cam, game.taxi, view, game.map, dt, insets);
@@ -821,11 +880,11 @@ function frame(now: number) {
       reducedMotion,
       braking: input.throttle < 0 && game.taxi.speed > 0,
       attract,
-      look: { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: currentCity().cab },
+      look: { paint: profile.equipped.paint, roof: profile.equipped.roof, cab: activeCity().cab },
       insets,
-      robo: currentCity().robo,
+      robo: activeCity().robo,
       queuedTurn: mode === 'playing' && stick ? assistMemory.queued : null,
-      landmarkNames: Object.fromEntries(currentCity().landmarks.map((l) => [l.id, l.name])),
+      landmarkNames: Object.fromEntries(activeCity().landmarks.map((l) => [l.id, l.name])),
     }, dt);
   }
   requestAnimationFrame(frame);
@@ -835,6 +894,11 @@ function frame(now: number) {
 
 applyTheme();
 applySound();
+if (fromDailyLink) {
+  $('dailyRow').classList.add('highlight');
+  requestAnimationFrame(() => $('dailyRow').focus());
+}
+void dayKey;
 $('buildLabel').textContent = `Build ${__BUILD__}`;
 for (let i = 0; i < 5; i++) spawnAv(game);
 setMode('title');

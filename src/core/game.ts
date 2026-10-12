@@ -89,8 +89,6 @@ export type GameEvent =
 
 export interface GameState {
   seed: number;
-  /** True if this run is the daily challenge. */
-  isDaily?: boolean;
   /** The named city being played, if any. */
   city: CityId | null;
   mode: ModeId;
@@ -221,7 +219,9 @@ export function createGame(opts: GameOptions): GameState {
   const rules = MODES[opts.mode ?? 'normal'];
   const g: GameState = {
     seed: opts.seed, city: opts.city?.id ?? null, mode: rules.id, rules, health: 100, damageCooldown: 0,
-    roster: new Roster(rng, opts.passengerNames ?? opts.city?.passengers ?? []),
+    // Passengers draw from their own random stream, so who you pick up never depends on how you
+    // drive (the daily challenge hands everyone the same passengers in the same order).
+    roster: new Roster(createRng(opts.seed ^ 0x9a55e), opts.passengerNames ?? opts.city?.passengers ?? []),
     map, rng, taxi, avs: [], route: [], powerups: [],
     job: undefined as unknown as Job,
     phase: 'ready', phaseTime: 0, time: 0,

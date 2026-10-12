@@ -1045,6 +1045,102 @@ h2 {
   75% { transform: translateX(3px); }
 }
 
+/* ---------- Daily challenge ---------- */
+
+.daily-row {
+  margin: 10px 0 0;
+  border: 1.5px solid transparent;
+}
+
+.daily-row.highlight {
+  border-color: var(--blue);
+}
+
+.daily-badge {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+}
+
+.daily-badge svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.daily-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-streak {
+  color: var(--yellow);
+  font-weight: 600;
+}
+
+:root[data-theme='day'] .daily-streak {
+  color: #a87800;
+}
+
+.daily-result {
+  margin: 0 0 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--fill);
+}
+
+.daily-result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.daily-result h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.daily-result-note {
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: right;
+}
+
+.daily-card {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.45;
+  user-select: text;
+  -webkit-user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.daily-result .button-row {
+  margin-top: 0;
+}
+
+/* One button fills the row when Share isn't available. */
+.daily-result .button-row:has(#shareDailyButton[hidden]) {
+  grid-template-columns: 1fr;
+}
+
 /* ---------- Settings notes ---------- */
 
 .setting-note {
