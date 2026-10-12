@@ -1188,8 +1188,12 @@ h2 {
 }
 
 @media (min-width: 1000px) {
+  /* Wide screens: beside the direction banner (14px in, at most 420px wide), not over it. */
   .coach {
     top: max(14px, env(safe-area-inset-top));
+    left: calc(14px + 420px + 12px);
+    transform: none;
+    width: min(440px, calc(100% - 446px - 80px));
   }
 }
 

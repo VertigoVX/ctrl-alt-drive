@@ -23,6 +23,10 @@ A top-down chase game in the spirit of Pac-Man, dressed as a navigation app. Pic
 
 Steering defaults to 125%, which playtesting found to be the sweet spot (still 25% gentler than the original, twitchier tuning). It has one-tap presets (Gentle 100%, Standard 125%, Sharp 150%) on the title screen, and a fine-grained slider in **Settings**, which is also reachable mid-shift from the gear button.
 
+On a touch screen, **turn assist** works like Pac-Man: point your thumb at the street you want, early, and the cab takes the next turn that way, braking for the corner. A chevron marks the junction it has queued. Point at a wall and it stops short instead of hitting it. It only ever follows your thumb, never the route line, and can be switched off in Settings. Keyboard steering is unchanged.
+
+New players start with a short **guided first fare**: a nearby passenger, a paused meter, and one robotaxi placed ahead to show how headlights and line of sight work. It can be skipped, and replayed from How to play.
+
 - **Fares.** Pick up at the green pin, drop off at the red one. The meter covers the whole trip, and whatever time is left when you arrive is paid as a bonus. Let it run out and the passenger calls a robotaxi instead.
 - **The fleet.** Self-driving cars cruise with their lidar sweeping ahead. The moment one sees you, its headlights flash on and it gives chase. Break its line of sight (buildings block it; water and parks don't) and it searches where it last saw you before giving up.
 - **Getting caught** costs you a cab and the passenger. Lose three cabs and the shift is over.
@@ -31,6 +35,16 @@ Steering defaults to 125%, which playtesting found to be the sweet spot (still 2
 - **Modes.** *Normal* is three cabs, and crashes only dent your pride (and your tips). *Hard* is two cabs: wreck one and it's gone, the fleet is faster, and it pays 1.5×. *Extreme* is two cabs with heavier crash damage that carries over when you're caught, and pays 2×.
 - **Cab condition.** Real crashes (not kerb scrapes) dent the cab. Finish a fare in mint condition for a chance of a tip, or a perk dropped nearby. A wrench key on the road repairs damage.
 - **Passengers.** Some are in a hurry (tight meter, better pay), some are sightseeing (relaxed meter), and business travellers tip well. Very rarely a VIP flags you down, shown by a gold pin: Shingai, Mark, Tiago, Denisha, Tsebo, Archal, Jordan or Duncan. VIPs pay double. Over 500 names are in rotation, shuffled like a deck of cards so you won't meet the same one again for at least ten passengers.
+- **Daily challenge.** One city, mode and starting traffic per day, the same for everyone (days run on UTC). Every city comes round once in each eight-day block; it's Normal Monday to Wednesday, Hard Thursday and Friday, and Extreme at the weekend. Everyone meets the same passengers in the same order, however they drive. Your best run and daily streak are saved, and the results screen gives you a card to copy or share:
+
+  ```
+  Ctrl+Alt+Drive daily #1
+  London, Normal
+  $1,240 earned, 5 fares, 2 escapes
+  🟩⭐🟨🟩🟥🟩🟥🟥
+  Streak: 3 days
+  ```
+  🟩 a clean fare, ⭐ a VIP, 🟨 a fare in a dented cab, ⬛ a meter that ran out, 🟥 a lost cab. Link straight to today's with `?daily`.
 - **The garage.** Every fare you complete is banked in your wallet, even if the shift ends badly. Spend it on paint jobs, roof lights, horns and map styles (Vintage, Blueprint, Neon Noir). Everything in the garage is cosmetic: nothing you buy makes the game easier. Your wallet and garage are saved in your browser.
 
 ### Cities
@@ -68,7 +82,7 @@ Requires Node 20 or newer. Add `?debug` to the URL to expose the live game state
 
 ### Built test-first
 
-All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 283 tests at about 98% line coverage.
+All game logic was written red → green: a failing spec first, then the implementation. The commit history keeps that trail, with `test: …` commits followed by `feat: …` commits. The core has 352 tests at about 98% line coverage.
 
 What makes that practical is a hard split. Everything that decides *what happens* lives in `src/core` as pure, deterministic TypeScript with no DOM access. Randomness comes from a seeded RNG, so a city, a spawn, or an AV's patrol can be reproduced exactly in a test. The renderer and HUD only read game state and draw it.
 
@@ -84,6 +98,9 @@ src/
     cities.ts         the eight cities: layouts, landmarks, streets, passengers
     modes.ts          Normal / Hard / Extreme rules
     passengers.ts     passenger types and VIPs
+    turnAssist.ts     Pac-Man turn queueing for the touch stick
+    daily.ts          daily challenge: rotation, streaks, share card
+    tutorial.ts       the guided first fare
     shop.ts           garage catalogue, wallet, buying/equipping, tamper-safe saves
     settings.ts       player settings (steering sensitivity, sound, map style)
     camera.ts  input.ts  format.ts  math.ts  rng.ts
@@ -103,6 +120,8 @@ scripts/balance.ts    difficulty probe
 **What you see is what they see.** Headlight cones are drawn from the same ray-marched line of sight the AI uses. A beam cut off by a building means the car genuinely can't see past it.
 
 **Tuned with a bot.** `npm run balance` plays every mode across the cities with a bot that follows the route, brakes for corners and ignores the fleet. On Normal it averages about two and a half fares before losing all three cabs; Hard and Extreme are progressively harsher. Raw driving isn't enough; you have to evade. The same probe set the crash-damage threshold: measuring every wall contact showed that impacts below 90 are almost all kerb scrapes while cornering, so only real crashes dent the cab.
+
+**Turn assist plans the corner like a driver.** It looks ahead along the street for the first junction with an exit the way you're pointing, works out the cab's real turning circle at your steering sensitivity, brakes to arrive at cornering speed, and turns in one radius before the junction. Simulated touch players across all eight cities finished every run with it (32 of 32, against 28 of 32 on the plain stick), about 12% faster, with 85% fewer crashes and 99% less crash damage. A regression test also checks that the game loop never steers on the player's behalf: evading the fleet means taking other streets, so the route line has to stay a suggestion.
 
 **Names come from shuffled decks, not dice.** Picking a random name each time makes repeats feel common even from a long list (the old game, which only used a city's ten local names, felt like it had four). Each pool is now a shuffled deck, dealt without replacement, and a reshuffle keeps the first few cards clear of whatever was just dealt. A test asserts a name never returns within ten draws, and that 50 fares in any city contain no repeats. VIP names are kept out of every regular pool so that a VIP name always means a VIP.
 
