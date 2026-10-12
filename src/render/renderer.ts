@@ -1,5 +1,6 @@
 import { DEFAULT_AV_TUNING, headlightsOn, type Autonomous } from '../core/autonomous';
 import type { Camera } from '../core/camera';
+import { TextWidthCache } from '../core/textWidth';
 import { isDrivable, Tile, tileAt, tileCenter, type CityMap } from '../core/city';
 import type { GameState, Powerup } from '../core/game';
 import type { Vec } from '../core/math';
@@ -49,6 +50,8 @@ export interface RenderOptions {
   landmarkNames: Record<string, string>;
 }
 
+const LABEL_FONT = '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif';
+
 /** Upper bound on backing-store pixels; keeps big tablets and 4K screens smooth. */
 const PIXEL_BUDGET = 7_000_000;
 
@@ -57,7 +60,15 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private cachedWidth = 0;
   private cachedHeight = 0;
-  private landmarkWidths = new Map<string, number>();
+  /** Label widths, measured once per string in its own save/restore so the draw font is untouched. */
+  private textWidths = new TextWidthCache((text) => {
+    const { ctx } = this;
+    ctx.save();
+    ctx.font = `600 100px ${LABEL_FONT}`;
+    const w = ctx.measureText(text).width;
+    ctx.restore();
+    return w;
+  });
   private labels: Label[] = [];
   private dashes: Dash[] = [];
   private mapRef: CityMap | null = null;
@@ -84,12 +95,15 @@ export class Renderer {
     
     this.cachedWidth = canvas.clientWidth;
     this.cachedHeight = canvas.clientHeight;
+    // Widths measured against the fallback font are stale once the web font arrives.
+    document.fonts?.ready.then(() => this.textWidths.clear());
   }
 
   /**
    * Match the backing store to the element's real size at the device's pixel density.
-   * Called every frame: it's a cheap comparison, and it means orientation changes and
-   * mobile browser toolbars sliding in and out can never leave the canvas stretched.
+   * Called every frame, but the size comes from a ResizeObserver rather than clientWidth and
+   * clientHeight, so it no longer forces a layout flush each frame. The canvas fills the
+   * viewport, so orientation changes and mobile toolbars still resize it and notify the observer.
    */
   syncSize() {
     const w = this.cachedWidth || this.canvas.clientWidth;
@@ -315,14 +329,6 @@ export class Renderer {
     return visible;
   }
 
-  private getLandmarkWidth(ctx: CanvasRenderingContext2D, name: string): number {
-    if (!this.landmarkWidths.has(name)) {
-      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", system-ui, sans-serif';
-      this.landmarkWidths.set(name, ctx.measureText(name).width);
-    }
-    return this.landmarkWidths.get(name)!;
-  }
-
   private drawLandmarkNames(map: CityMap, t: MapTheme, cam: Camera, names: Record<string, string>) {
     if (cam.zoom < 0.4) return;
     const { ctx } = this;
@@ -335,8 +341,7 @@ export class Renderer {
       if (!name) continue;
       const x = (l.x + l.w / 2) * map.tileSize;
       const y = (l.y + l.h) * map.tileSize - (l.overlay ? -14 / cam.zoom : 12 / cam.zoom);
-      const baseWidth = this.getLandmarkWidth(ctx, name);
-      const w = (baseWidth + 12) / cam.zoom;
+      const w = this.textWidths.width(name, px) + 12 / cam.zoom;
       ctx.fillStyle = t.labelHalo;
       this.roundRect(x - w / 2, y - 9 / cam.zoom, w, 18 / cam.zoom, 9 / cam.zoom);
       ctx.fill();
